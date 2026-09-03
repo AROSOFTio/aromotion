@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AroMotion.App.Models;
 
 namespace AroMotion.App.Services;
 
@@ -22,6 +23,7 @@ public sealed class ProjectSession
     public int FramesPerSecond { get; }
     public DateTimeOffset StartedAtUtc { get; private set; }
     public DateTimeOffset? EndedAtUtc { get; private set; }
+    public IReadOnlyList<ZoomSegment> ZoomSegments { get; private set; } = Array.Empty<ZoomSegment>();
 
     public static async Task<ProjectSession> CreateAsync(string rootDirectory, string qualityProfile, int fps)
     {
@@ -47,9 +49,10 @@ public sealed class ProjectSession
         return session;
     }
 
-    public async Task CompleteAsync()
+    public async Task CompleteAsync(IReadOnlyList<ZoomSegment>? zoomSegments = null)
     {
         EndedAtUtc = DateTimeOffset.UtcNow;
+        ZoomSegments = zoomSegments ?? Array.Empty<ZoomSegment>();
         await WriteProjectFileAsync("recorded");
     }
 
@@ -74,7 +77,7 @@ public sealed class ProjectSession
             startedAtUtc = StartedAtUtc,
             endedAtUtc = EndedAtUtc,
             timeline = Array.Empty<object>(),
-            zoomSegments = Array.Empty<object>(),
+            zoomSegments = ZoomSegments,
             cameraKeyframes = Array.Empty<object>(),
             annotations = Array.Empty<object>(),
             captions = Array.Empty<object>()
