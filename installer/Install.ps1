@@ -23,13 +23,11 @@ $existingCandidates = @(
     (Join-Path $repoRoot 'portable\tools\ffmpeg\ffmpeg.exe'),
     (Join-Path $PSScriptRoot 'tools\ffmpeg\ffmpeg.exe')
 )
-$reused = $false
 foreach ($candidate in $existingCandidates) {
     if (Test-Path $candidate) {
         $sourceDir = Split-Path $candidate -Parent
         Write-Host 'Reusing the recording engine already on this PC...' -ForegroundColor Green
         Copy-Item (Join-Path $sourceDir '*') $toolTarget -Recurse -Force
-        $reused = $true
         break
     }
 }
@@ -60,10 +58,14 @@ if (-not (Test-Path $ffmpeg) -or -not (Test-Path $ffprobe)) { throw 'AROMOTION m
 Write-Host 'Preparing AROMOTION.exe...' -ForegroundColor Cyan
 $buildSource = Join-Path $env:TEMP ('AROMOTION-' + [Guid]::NewGuid().ToString('N') + '.cs')
 $src = Get-Content $sourceFile -Raw
-# Phase-1 source compatibility patches for the inbox .NET Framework compiler.
+# Compatibility fixes for the Windows inbox .NET Framework compiler.
 $src = $src.Replace('Environment.GetFolderPath', 'System.Environment.GetFolderPath')
 $src = $src.Replace('Environment.SpecialFolder', 'System.Environment.SpecialFolder')
-$src = $src.Replace('long age = Environment.TickCount64Compat() - capture.LastClickMs; // replaced below by safe approximation at runtime', 'long age = 0;')
+# Make the click ring an actual short pulse using the same recording stopwatch.
+$src = $src.Replace('public Point CursorPoint { get; private set; } public long LastClickMs { get; private set; }', 'public Point CursorPoint { get; private set; } public long LastClickMs { get; private set; } public long ElapsedMs { get { return clock.ElapsedMilliseconds; } }')
+$src = $src.Replace('long age = Environment.TickCount64Compat() - capture.LastClickMs; // replaced below by safe approximation at runtime', 'long age = capture.ElapsedMs - capture.LastClickMs;')
+$src = $src.Replace('age = 0; // hook time and overlay clock are intentionally not mixed; pulse is drawn as a small persistent click marker in Phase 1.', '')
+$src = $src.Replace('if (capture.LastClickMs > 0) using (var pen = new Pen(Color.FromArgb(220,255,95,70),3)) e.Graphics.DrawEllipse(pen,p.X-16,p.Y-16,32,32);', 'if (capture.LastClickMs > 0 && age >= 0 && age < 500) { int r = 14 + (int)(age / 18); int alpha = Math.Max(35, 230 - (int)(age * 0.38)); using (var pen = new Pen(Color.FromArgb(alpha,255,95,70),3)) e.Graphics.DrawEllipse(pen,p.X-r,p.Y-r,r*2,r*2); }')
 Set-Content -Path $buildSource -Value $src -Encoding UTF8
 
 $cscCandidates = @(
