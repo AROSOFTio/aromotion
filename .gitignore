@@ -1,0 +1,40 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# Local tooling / binaries
+tools/ffmpeg/*.exe
+tools/ffmpeg/*.dll
+
+# Recordings and generated media
+*.mkv
+*.mp4
+*.mov
+*.avi
+*.webm
+*.wav
+*.flac
+*.jsonl
+recordings/
+AROMOTION Projects/
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
