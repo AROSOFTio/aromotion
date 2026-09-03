@@ -28,4 +28,4 @@ if(-not (Test-Path $ffmpegExe)){
 if(-not (Test-Path $ffmpegExe)){throw 'The AROMOTION recording engine could not be installed.'}
 Write-Host 'AROMOTION recording engine is ready.' -ForegroundColor Green
 Write-Host 'Opening AROMOTION Studio...'
-Start-Process powershell.exe -WorkingDirectory $root -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $root 'Recorder.ps1'))
+Start-Process powershell.exe -WorkingDirectory $root -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $root 'Recorder5.ps1'))
