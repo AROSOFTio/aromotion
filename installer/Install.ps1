@@ -61,6 +61,7 @@ $src = Get-Content $sourceFile -Raw
 # Compatibility fixes for the Windows inbox .NET Framework compiler.
 $src = $src.Replace('Environment.GetFolderPath', 'System.Environment.GetFolderPath')
 $src = $src.Replace('Environment.SpecialFolder', 'System.Environment.SpecialFolder')
+$src = $src.Replace('readonly MouseCapture capture; readonly bool halo, pulse; readonly Timer timer = new Timer();', 'readonly MouseCapture capture; readonly bool halo, pulse; readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();')
 # Make the click ring an actual short pulse using the same recording stopwatch.
 $src = $src.Replace('public Point CursorPoint { get; private set; } public long LastClickMs { get; private set; }', 'public Point CursorPoint { get; private set; } public long LastClickMs { get; private set; } public long ElapsedMs { get { return clock.ElapsedMilliseconds; } }')
 $src = $src.Replace('long age = Environment.TickCount64Compat() - capture.LastClickMs; // replaced below by safe approximation at runtime', 'long age = capture.ElapsedMs - capture.LastClickMs;')
