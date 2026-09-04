@@ -2,13 +2,13 @@ name: Windows Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/focusee-motion-parity ]
   pull_request:
     branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -20,33 +20,60 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore Windows x64
-        run: dotnet restore src/AroMotion.App/AroMotion.App.csproj -r win-x64 -p:EnableWindowsTargeting=true
+        shell: pwsh
+        run: dotnet restore src/AroMotion.App/AroMotion.App.csproj -r win-x64
 
-      - name: Publish portable Windows build
-        run: >-
-          dotnet publish src/AroMotion.App/AroMotion.App.csproj
-          -c Release
-          -r win-x64
-          --self-contained true
-          --no-restore
-          -p:EnableWindowsTargeting=true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:DebugType=None
-          -p:DebugSymbols=false
-          -o artifacts/AROMOTION-win-x64
-
-      - name: Add quick setup files
-        shell: bash
+      - name: Publish self-contained Windows x64
+        shell: pwsh
         run: |
-          cp scripts/Setup-AROMOTION.ps1 artifacts/AROMOTION-win-x64/Setup-AROMOTION.ps1
-          cp scripts/START.cmd artifacts/AROMOTION-win-x64/START.cmd
-          cp QUICKSTART.md artifacts/AROMOTION-win-x64/QUICKSTART.md
+          dotnet publish src/AroMotion.App/AroMotion.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            --no-restore `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o artifacts/AROMOTION-win-x64
 
-      - name: Upload portable build
+      - name: Bundle FFmpeg for no-admin testing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg.zip'
+          $extract = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $ffmpeg = Get-ChildItem $extract -Filter ffmpeg.exe -Recurse -File | Select-Object -First 1
+          $ffprobe = Get-ChildItem $extract -Filter ffprobe.exe -Recurse -File | Select-Object -First 1
+          if (-not $ffmpeg -or -not $ffprobe) { throw 'FFmpeg package did not contain ffmpeg.exe/ffprobe.exe' }
+          $target = 'artifacts/AROMOTION-win-x64/tools/ffmpeg'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item $ffmpeg.FullName (Join-Path $target 'ffmpeg.exe') -Force
+          Copy-Item $ffprobe.FullName (Join-Path $target 'ffprobe.exe') -Force
+
+      - name: Add portable test guide
+        shell: pwsh
+        run: |
+          @'
+          AROMOTION NO-ADMIN TEST BUILD
+
+          1. Extract this ZIP anywhere you can write: Downloads, Documents or Desktop.
+          2. Double-click AROMOTION.exe. No administrator rights are required.
+          3. FFmpeg and FFprobe are already bundled under tools\ffmpeg.
+          4. Record a short 10-20 second test, stop it, then click Open Motion Editor.
+          5. Test Auto Zoom, 3D Motion, Cursor/Mouse, Spotlight and Privacy Blur editing.
+
+          This is a per-folder portable beta. It does not write to Program Files and does not require an installer.
+          If your organization blocks unsigned executables by policy, do not bypass that policy; ask IT to allow the test binary or use a personal PC.
+          '@ | Set-Content 'artifacts/AROMOTION-win-x64/NO-ADMIN-TEST.txt' -Encoding UTF8
+
+      - name: Upload no-admin portable build
         uses: actions/upload-artifact@v4
         with:
-          name: AROMOTION-win-x64-portable
+          name: AROMOTION-motion-parity-no-admin-win-x64
           path: artifacts/AROMOTION-win-x64
           if-no-files-found: error
           compression-level: 6
