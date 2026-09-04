@@ -26,40 +26,35 @@ public static class MotionPresetService
 
         switch (preset)
         {
-            case "Push":
-                result.Depth = 18;
-                result.RotateX = -2;
-                result.RotateY = 5;
-                break;
-            case "Tilt":
-                result.RotateX = -7;
-                result.RotateY = 10;
-                result.Depth = 8;
-                result.Perspective = 1.15;
-                break;
-            case "Reveal":
-                result.PanX = 12;
-                result.RotateY = -12;
-                result.Depth = 12;
-                result.Perspective = 1.2;
-                break;
-            case "Orbit":
-                result.RotateX = -5;
-                result.RotateY = 15;
-                result.RotateZ = 1.5;
-                result.PanX = 6;
-                result.Depth = 10;
-                result.Perspective = 1.25;
-                break;
-            default:
-                result.Depth = 14;
-                result.RotateX = -2.5;
-                result.RotateY = 4;
-                break;
+            case "Push": result.Depth = 18; result.RotateX = -2; result.RotateY = 5; break;
+            case "Tilt": result.RotateX = -7; result.RotateY = 10; result.Depth = 8; result.Perspective = 1.15; break;
+            case "Reveal": result.PanX = 12; result.RotateY = -12; result.Depth = 12; result.Perspective = 1.2; break;
+            case "Orbit": result.RotateX = -5; result.RotateY = 15; result.RotateZ = 1.5; result.PanX = 6; result.Depth = 10; result.Perspective = 1.25; break;
+            default: result.Depth = 14; result.RotateX = -2.5; result.RotateY = 4; break;
         }
 
+        var duration = Math.Max(1, result.EndMs - result.StartMs);
+        var inTime = result.StartMs + Math.Min(420, duration / 3);
+        var outTime = result.EndMs - Math.Min(420, duration / 3);
+        result.Keyframes.Add(new Motion3DKeyframe { TimeMs = result.StartMs, Easing = result.Easing });
+        result.Keyframes.Add(Peak(result, inTime));
+        if (outTime > inTime + 60) result.Keyframes.Add(Peak(result, outTime));
+        result.Keyframes.Add(new Motion3DKeyframe { TimeMs = result.EndMs, Easing = result.Easing });
         return result;
     }
+
+    public static Motion3DKeyframe Peak(Motion3DSegment m, long timeMs) => new()
+    {
+        TimeMs = timeMs,
+        RotateX = m.RotateX,
+        RotateY = m.RotateY,
+        RotateZ = m.RotateZ,
+        Depth = m.Depth,
+        PanX = m.PanX,
+        PanY = m.PanY,
+        Perspective = m.Perspective,
+        Easing = m.Easing
+    };
 
     public static double Ease(string easing, double t)
     {
