@@ -1,8 +1,8 @@
 <Window x:Class="AroMotion.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AROMOTION Studio" Height="610" Width="920"
-        MinHeight="540" MinWidth="780"
+        Title="AROMOTION Studio" Height="640" Width="980"
+        MinHeight="560" MinWidth="820"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing">
     <Grid Background="#101216">
@@ -16,7 +16,7 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left">
                     <TextBlock Text="AROMOTION" Foreground="White" FontWeight="Bold" FontSize="24"/>
-                    <TextBlock Text="Lossless screen recorder · Motion editor foundation" Foreground="#9EA7B7" FontSize="13" Margin="0,4,0,0"/>
+                    <TextBlock Text="Lossless recorder · Smart zoom · 3D motion · Cursor effects · Spotlight · Privacy blur" Foreground="#9EA7B7" FontSize="13" Margin="0,4,0,0"/>
                 </StackPanel>
                 <Border DockPanel.Dock="Right" Background="#20242C" CornerRadius="14" Padding="12,6" VerticalAlignment="Center">
                     <TextBlock x:Name="HeaderStatusText" Text="READY" Foreground="#B8C1D1" FontSize="12" FontWeight="SemiBold"/>
@@ -27,7 +27,7 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="28,24">
                 <TextBlock Text="Recorder" Foreground="White" FontWeight="SemiBold" FontSize="19"/>
-                <TextBlock Text="The current milestone captures an untouched lossless desktop master. Cursor, clicks and shortcuts are stored separately for automatic zoom and motion reconstruction." Foreground="#A6ADBA" TextWrapping="Wrap" Margin="0,6,0,20"/>
+                <TextBlock Text="Capture an untouched lossless desktop master. Cursor, clicks and shortcuts are stored separately so AROMOTION can reconstruct the cursor and generate editable motion after recording." Foreground="#A6ADBA" TextWrapping="Wrap" Margin="0,6,0,20"/>
 
                 <Border Background="#171A20" BorderBrush="#272B34" BorderThickness="1" CornerRadius="10" Padding="18">
                     <Grid>
@@ -73,8 +73,11 @@
                 <Border Margin="0,20,0,0" Background="#171A20" BorderBrush="#272B34" BorderThickness="1" CornerRadius="10" Padding="18">
                     <StackPanel>
                         <DockPanel>
-                            <TextBlock Text="Session" Foreground="White" FontWeight="SemiBold"/>
-                            <Button x:Name="OpenFolderButton" DockPanel.Dock="Right" Content="Open project folder" IsEnabled="False" Padding="10,4" Click="OpenFolder_Click"/>
+                            <TextBlock Text="Session" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button x:Name="MotionEditorButton" Content="Open Motion Editor" IsEnabled="False" Padding="12,5" Click="OpenMotionEditor_Click"/>
+                                <Button x:Name="OpenFolderButton" Content="Open project folder" IsEnabled="False" Padding="10,4" Click="OpenFolder_Click"/>
+                            </StackPanel>
                         </DockPanel>
                         <TextBlock x:Name="SessionPathText" Text="No recording yet." Foreground="#9EA7B7" TextWrapping="Wrap" Margin="0,9,0,0"/>
                         <TextBlock x:Name="RecorderLogText" Text="FFmpeg has not started." Foreground="#727C8E" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" Margin="0,10,0,0" MaxHeight="80"/>
@@ -83,15 +86,15 @@
 
                 <Border Margin="0,20,0,0" Background="#151820" CornerRadius="10" Padding="16">
                     <TextBlock Foreground="#AEB7C6" TextWrapping="Wrap">
-                        <Run Text="Quality note: "/><Run FontWeight="Bold" Foreground="White" Text="FFV1 is mathematically lossless."/>
-                        <Run Text=" Files can be very large. The planned editor will create a lightweight proxy for smooth editing while final output is always rendered from the untouched master."/>
+                        <Run Text="Motion note: "/><Run FontWeight="Bold" Foreground="White" Text="Effects are non-destructive."/>
+                        <Run Text=" The clean master keeps the mouse unbaked. Open Motion Editor to regenerate auto-zoom, manually move/resize zoom blocks, apply 3D presets or custom values, replace/smooth the cursor, and add spotlight/privacy blur regions."/>
                     </TextBlock>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
         <Border Grid.Row="2" Background="#171A20" BorderBrush="#272B34" BorderThickness="0,1,0,0" Padding="24,12">
-            <TextBlock Text="AROSOFT Innovations Ltd · AROMOTION Studio M0" Foreground="#697386" FontSize="11"/>
+            <TextBlock Text="AROSOFT Innovations Ltd · AROMOTION Studio · Motion parity branch" Foreground="#697386" FontSize="11"/>
         </Border>
     </Grid>
 </Window>
