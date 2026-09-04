@@ -22,11 +22,16 @@ public sealed class MotionRenderService
         var projectDirectory = Path.GetDirectoryName(outputPath)!;
         Directory.CreateDirectory(projectDirectory);
         var events = await LoadEventsAsync(project.EventsPath);
-        var assPath = Path.Combine(projectDirectory, "aromotion-cursor.ass");
-        await CursorAssWriter.WriteAsync(assPath, info.Width, info.Height, events, project.Cursor);
 
-        progress?.Invoke("Building non-destructive motion graph…");
-        var graph = BuildFilterGraph(project, info, events, File.Exists(assPath) && !project.Cursor.HideCursor);
+        var customCursor = project.Cursor.Style.Equals("Custom", StringComparison.OrdinalIgnoreCase)
+                           && IsSupportedCursorImage(project.Cursor.CustomCursorPath);
+        var customClickSound = project.Cursor.ClickSoundEnabled
+                               && !string.IsNullOrWhiteSpace(project.Cursor.ClickSoundPath)
+                               && File.Exists(project.Cursor.ClickSoundPath);
+
+        var assPath = Path.Combine(projectDirectory, "aromotion-cursor.ass");
+        await CursorAssWriter.WriteAsync(assPath, info.Width, info.Height, events, project.Cursor, drawCursor: !customCursor);
+
         var start = new ProcessStartInfo
         {
             FileName = ffmpeg,
@@ -35,8 +40,34 @@ public sealed class MotionRenderService
             RedirectStandardError = true,
             WorkingDirectory = projectDirectory
         };
-        Add(start, "-hide_banner", "-y", "-i", project.SourceVideo, "-filter_complex", graph,
-            "-map", "[outv]", "-map", "0:a?",
+
+        Add(start, "-hide_banner", "-y", "-i", project.SourceVideo);
+        var nextInput = 1;
+        int? customCursorInput = null;
+        int? clickSoundInput = null;
+
+        if (customCursor)
+        {
+            customCursorInput = nextInput++;
+            Add(start, "-loop", "1", "-framerate", F(Math.Clamp(info.Fps, 15, 120)), "-i", project.Cursor.CustomCursorPath!);
+        }
+        if (customClickSound)
+        {
+            clickSoundInput = nextInput++;
+            Add(start, "-i", project.Cursor.ClickSoundPath!);
+        }
+
+        progress?.Invoke("Building editable zoom / 3D / cursor / privacy graph…");
+        var graph = BuildFilterGraph(project, info, events, File.Exists(assPath), customCursorInput, clickSoundInput);
+        Add(start, "-filter_complex", graph, "-map", "[outv]");
+
+        var hasClickAudio = project.Cursor.ClickSoundEnabled && events.Any(e => e.Type == "mouse_click");
+        if (hasClickAudio)
+            Add(start, "-map", "[outa]");
+        else if (info.HasAudio)
+            Add(start, "-map", "0:a:0?");
+
+        Add(start,
             "-c:v", "libx264", "-preset", "medium", "-crf", "12", "-pix_fmt", "yuv444p",
             "-c:a", "aac", "-b:a", "256k", "-movflags", "+faststart", outputPath);
 
@@ -48,12 +79,12 @@ public sealed class MotionRenderService
             lock (tail)
             {
                 tail.Enqueue(e.Data);
-                while (tail.Count > 30) tail.Dequeue();
+                while (tail.Count > 40) tail.Dequeue();
             }
         };
         if (!process.Start()) throw new InvalidOperationException("FFmpeg could not start.");
         process.BeginErrorReadLine();
-        progress?.Invoke("Rendering zoom, 3D, cursor, spotlight and privacy effects…");
+        progress?.Invoke("Rendering non-destructive motion effects…");
         await process.WaitForExitAsync();
         if (process.ExitCode != 0)
         {
@@ -64,7 +95,13 @@ public sealed class MotionRenderService
         progress?.Invoke("Render complete");
     }
 
-    private static string BuildFilterGraph(MotionProjectState project, VideoInfo info, List<CaptureEvent> events, bool cursorAss)
+    private static string BuildFilterGraph(
+        MotionProjectState project,
+        VideoInfo info,
+        List<CaptureEvent> events,
+        bool cursorAss,
+        int? customCursorInput,
+        int? clickSoundInput)
     {
         var sb = new StringBuilder();
         var zoom = BuildZoomExpressions(project.Zooms.Where(x => x.Enabled).OrderBy(x => x.StartMs).ToList(), info.Width, info.Height);
@@ -78,22 +115,56 @@ public sealed class MotionRenderService
         var motions = project.Motions3D.Where(x => x.Enabled).OrderBy(x => x.StartMs).ToList();
         if (motions.Count > 0)
         {
-            var perspective = BuildPerspectiveExpressions(motions, info.Width, info.Height);
-            var rotate = BuildMotionValue(motions, m => m.RotateZ * m.Intensity, "0");
-            var depth = BuildMotionValue(motions, m => m.Depth * m.Intensity / 100.0, "0");
-            var panX = BuildMotionValue(motions, m => m.PanX * m.Intensity, "0");
-            var panY = BuildMotionValue(motions, m => m.PanY * m.Intensity, "0");
-            sb.Append('[').Append(last).Append("]perspective=x0='").Append(perspective.X0).Append("':y0='").Append(perspective.Y0)
-              .Append("':x1='").Append(perspective.X1).Append("':y1='").Append(perspective.Y1)
-              .Append("':x2='").Append(perspective.X2).Append("':y2='").Append(perspective.Y2)
-              .Append("':x3='").Append(perspective.X3).Append("':y3='").Append(perspective.Y3)
+            var rx = BuildMotionProperty(motions, m => m.RotateX, k => k.RotateX, 0);
+            var ry = BuildMotionProperty(motions, m => m.RotateY, k => k.RotateY, 0);
+            var rz = BuildMotionProperty(motions, m => m.RotateZ, k => k.RotateZ, 0);
+            var depth = BuildMotionProperty(motions, m => m.Depth / 100.0, k => k.Depth / 100.0, 0);
+            var panX = BuildMotionProperty(motions, m => m.PanX, k => k.PanX, 0);
+            var panY = BuildMotionProperty(motions, m => m.PanY, k => k.PanY, 0);
+            var perspective = BuildMotionProperty(motions, m => m.Perspective, k => k.Perspective, 1);
+
+            var ampX = $"(({ry})*({perspective})*{F(info.Width * .09 / 45.0)})";
+            var ampY = $"(({rx})*({perspective})*{F(info.Height * .09 / 45.0)})";
+
+            sb.Append('[').Append(last).Append("]format=rgba,")
+              .Append("perspective=x0='").Append(ampX).Append("':y0='").Append(ampY)
+              .Append("':x1='W+").Append(ampX).Append("':y1='-").Append(ampY)
+              .Append("':x2='-").Append(ampX).Append("':y2='H-").Append(ampY)
+              .Append("':x3='W-").Append(ampX).Append("':y3='H+").Append(ampY)
               .Append("':sense=destination:eval=frame:interpolation=cubic,")
-              .Append("rotate=angle='(").Append(rotate).Append(")*PI/180':ow=iw:oh=ih:fillcolor=black,")
+              .Append("rotate=angle='(").Append(rz).Append(")*PI/180':ow=iw:oh=ih:fillcolor=none,")
               .Append("scale=w='trunc(iw*(1+(").Append(depth).Append("))/2)*2':h='trunc(ih*(1+(").Append(depth).Append("))/2)*2':eval=frame,")
               .Append("crop=").Append(info.Width).Append(':').Append(info.Height)
               .Append(":x='max(0,min(iw-").Append(info.Width).Append(",(iw-").Append(info.Width).Append(")/2-(").Append(panX).Append(")))'")
-              .Append(":y='max(0,min(ih-").Append(info.Height).Append(",(ih-").Append(info.Height).Append(")/2-(").Append(panY).Append(")))'[m0];");
-            last = "m0";
+              .Append(":y='max(0,min(ih-").Append(info.Height).Append(",(ih-").Append(info.Height).Append(")/2-(").Append(panY).Append(")))'[mraw];");
+            last = "mraw";
+
+            var shadowMotions = motions.Where(m => m.Shadow).ToList();
+            if (shadowMotions.Count > 0)
+            {
+                var enable = EnableExpr(shadowMotions);
+                var shadowOpacity = F(shadowMotions.Max(m => Math.Clamp(m.ShadowOpacity, 0, .85)));
+                var blur = F(shadowMotions.Max(m => Math.Clamp(m.ShadowBlur, 1, 40)));
+                sb.Append('[').Append(last).Append("]split=2[shadowbase][shadowsrc];")
+                  .Append("[shadowsrc]colorchannelmixer=rr=0:gg=0:bb=0:aa=").Append(shadowOpacity)
+                  .Append(",boxblur=luma_radius=").Append(blur).Append(":luma_power=1:alpha_radius=").Append(blur).Append(":alpha_power=1[shadow];")
+                  .Append("color=c=#080A10:s=").Append(info.Width).Append('x').Append(info.Height).Append(":r=").Append(F(info.Fps)).Append("[shadowbg];")
+                  .Append("[shadowbg][shadow]overlay=x=10:y=12:shortest=1:enable='").Append(enable).Append("'[withshadow];")
+                  .Append("[withshadow][shadowbase]overlay=x=0:y=0:shortest=1[mshadow];");
+                last = "mshadow";
+            }
+
+            var reflectionMotions = motions.Where(m => m.Reflection).ToList();
+            if (reflectionMotions.Count > 0)
+            {
+                var enable = EnableExpr(reflectionMotions);
+                var alpha = F(reflectionMotions.Max(m => Math.Clamp(m.ReflectionOpacity, 0, .55)));
+                var strip = Math.Max(30, (int)(info.Height * .20));
+                sb.Append('[').Append(last).Append("]split=2[refbase][refsrc];")
+                  .Append("[refsrc]vflip,crop=iw:").Append(strip).Append(":0:0,format=rgba,colorchannelmixer=aa=").Append(alpha).Append("[reflection];")
+                  .Append("[refbase][reflection]overlay=x=0:y=H-h:shortest=1:enable='").Append(enable).Append("'[mref];");
+                last = "mref";
+            }
         }
 
         var spotlightIndex = 0;
@@ -103,23 +174,30 @@ public sealed class MotionRenderService
             if (spot.Shape.Equals("Circle", StringComparison.OrdinalIgnoreCase))
             {
                 var center = ResolveTrackedCenter(spot.X, spot.Y, spot.FollowCursor, spot.StartMs, spot.EndMs, events);
-                var angle = F(Math.Clamp(0.25 + spot.Darkness * 1.1, 0.25, 1.45));
+                var featherFactor = Math.Clamp(spot.Feather / Math.Max(20.0, Math.Min(spot.Width, spot.Height)), 0, .85);
+                var angle = F(Math.Clamp(.30 + spot.Darkness * 1.05 - featherFactor * .18, .18, 1.42));
                 sb.Append('[').Append(last).Append("]vignette=angle=").Append(angle)
                   .Append(":x0='").Append(center.X).Append("':y0='").Append(center.Y)
-                  .Append("':eval=frame:enable='between(t,").Append(S(spot.StartMs)).Append(',').Append(S(spot.EndMs)).Append(")'[").Append(next).Append("]; ");
+                  .Append(":eval=frame:enable='between(t,").Append(S(spot.StartMs)).Append(',').Append(S(spot.EndMs)).Append(")'[").Append(next).Append("]; ");
             }
             else
             {
-                var alpha = F(Math.Clamp(spot.Darkness, 0, .95));
-                var left = Math.Max(0, spot.X - spot.Width / 2);
-                var top = Math.Max(0, spot.Y - spot.Height / 2);
-                var right = Math.Min(info.Width, left + spot.Width);
-                var bottom = Math.Min(info.Height, top + spot.Height);
                 var enable = $"between(t,{S(spot.StartMs)},{S(spot.EndMs)})";
-                sb.Append('[').Append(last).Append("]drawbox=x=0:y=0:w=iw:h=").Append(top).Append(":color=black@").Append(alpha).Append(":t=fill:enable='").Append(enable).Append("',")
-                  .Append("drawbox=x=0:y=").Append(bottom).Append(":w=iw:h=ih-").Append(bottom).Append(":color=black@").Append(alpha).Append(":t=fill:enable='").Append(enable).Append("',")
-                  .Append("drawbox=x=0:y=").Append(top).Append(":w=").Append(left).Append(":h=").Append(Math.Max(1, bottom - top)).Append(":color=black@").Append(alpha).Append(":t=fill:enable='").Append(enable).Append("',")
-                  .Append("drawbox=x=").Append(right).Append(":y=").Append(top).Append(":w=iw-").Append(right).Append(":h=").Append(Math.Max(1, bottom - top)).Append(":color=black@").Append(alpha).Append(":t=fill:enable='").Append(enable).Append("'[").Append(next).Append("]; ");
+                var layers = Math.Clamp((int)Math.Ceiling(spot.Feather / 8.0) + 1, 1, 6);
+                var layerInput = last;
+                for (var layer = 0; layer < layers; layer++)
+                {
+                    var fraction = (layer + 1) / (double)layers;
+                    var expansion = spot.Feather * (1 - fraction);
+                    var alpha = 1 - Math.Pow(1 - Math.Clamp(spot.Darkness, 0, .95), 1.0 / layers);
+                    var left = Math.Max(0, spot.X - spot.Width / 2.0 - expansion);
+                    var top = Math.Max(0, spot.Y - spot.Height / 2.0 - expansion);
+                    var right = Math.Min(info.Width, spot.X + spot.Width / 2.0 + expansion);
+                    var bottom = Math.Min(info.Height, spot.Y + spot.Height / 2.0 + expansion);
+                    var layerOut = layer == layers - 1 ? next : $"sf{spotlightIndex}_{layer}";
+                    AppendRectangleSpotlightLayer(sb, layerInput, layerOut, left, top, right, bottom, alpha, enable);
+                    layerInput = layerOut;
+                }
             }
             last = next;
             spotlightIndex++;
@@ -133,26 +211,99 @@ public sealed class MotionRenderService
             var blurred = $"bc{blurIndex}";
             var next = $"b{blurIndex}";
             var center = ResolveTrackedCenter(blur.X, blur.Y, blur.TrackCursor, blur.StartMs, blur.EndMs, events);
-            var x = $"max(0,min(W-{blur.Width},({center.X})-{blur.Width / 2}))";
-            var y = $"max(0,min(H-{blur.Height},({center.Y})-{blur.Height / 2}))";
+            var feather = (int)Math.Clamp(Math.Round(blur.Feather), 0, 40);
+            var cropW = Math.Min(info.Width, blur.Width + feather * 2);
+            var cropH = Math.Min(info.Height, blur.Height + feather * 2);
+            var x = $"max(0,min(iw-{cropW},({center.X})-{cropW / 2}))";
+            var y = $"max(0,min(ih-{cropH},({center.Y})-{cropH / 2}))";
+            var overlayX = $"max(0,min(main_w-overlay_w,({center.X})-{cropW / 2}))";
+            var overlayY = $"max(0,min(main_h-overlay_h,({center.Y})-{cropH / 2}))";
+
             sb.Append('[').Append(last).Append("]split=2[").Append(splitA).Append("][").Append(splitB).Append("]; ")
-              .Append('[').Append(splitB).Append("]crop=").Append(blur.Width).Append(':').Append(blur.Height).Append(":x='").Append(x).Append("':y='").Append(y)
-              .Append("',boxblur=luma_radius=").Append(F(Math.Clamp(blur.Intensity, 1, 50))).Append(":luma_power=2[").Append(blurred).Append("]; ")
-              .Append('[').Append(splitA).Append("][").Append(blurred).Append("]overlay=x='").Append(x).Append("':y='").Append(y)
+              .Append('[').Append(splitB).Append("]crop=").Append(cropW).Append(':').Append(cropH).Append(":x='").Append(x).Append("':y='").Append(y).Append("',")
+              .Append("boxblur=luma_radius=").Append(F(Math.Clamp(blur.Intensity, 1, 50))).Append(":luma_power=2");
+
+            if (feather > 0)
+            {
+                var f = Math.Max(1, feather);
+                sb.Append(",format=yuva444p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='255*min(1,min(X/")
+                  .Append(f).Append(",(W-1-X)/").Append(f).Append(",Y/").Append(f).Append(",(H-1-Y)/").Append(f).Append("))' ");
+            }
+            sb.Append('[').Append(blurred).Append("]; ")
+              .Append('[').Append(splitA).Append("][").Append(blurred).Append("]overlay=x='").Append(overlayX).Append("':y='").Append(overlayY)
               .Append("':enable='between(t,").Append(S(blur.StartMs)).Append(',').Append(S(blur.EndMs)).Append(")'[").Append(next).Append("]; ");
             last = next;
             blurIndex++;
         }
 
+        if (customCursorInput is not null && !project.Cursor.HideCursor)
+        {
+            var size = Math.Max(12, (int)Math.Round(36 * Math.Clamp(project.Cursor.Size, .5, 3)));
+            var pos = BuildCursorPositionExpressions(events, project.Cursor.Smoothing, info.Width, info.Height);
+            sb.Append('[').Append(customCursorInput.Value).Append(":v]format=rgba,scale=").Append(size).Append(':').Append(size)
+              .Append(",colorchannelmixer=aa=").Append(F(project.Cursor.Opacity)).Append("[customcursor];")
+              .Append('[').Append(last).Append("][customcursor]overlay=x='").Append(pos.X).Append("':y='").Append(pos.Y)
+              .Append("':shortest=1:eval=frame[withcustomcursor];");
+            last = "withcustomcursor";
+        }
+
         if (cursorAss)
         {
-            sb.Append('[').Append(last).Append("]subtitles=aromotion-cursor.ass[outv]");
+            sb.Append('[').Append(last).Append("]subtitles=aromotion-cursor.ass[vfinal];");
+            last = "vfinal";
+        }
+        sb.Append('[').Append(last).Append("]format=yuv444p[outv];");
+
+        AppendClickAudioGraph(sb, project.Cursor, events, clickSoundInput, info.HasAudio);
+        return sb.ToString().TrimEnd(';');
+    }
+
+    private static void AppendRectangleSpotlightLayer(StringBuilder sb, string input, string output, double left, double top, double right, double bottom, double alpha, string enable)
+    {
+        var a = F(Math.Clamp(alpha, 0, .95));
+        sb.Append('[').Append(input).Append("]drawbox=x=0:y=0:w=iw:h=").Append(F(top)).Append(":color=black@").Append(a).Append(":t=fill:enable='").Append(enable).Append("',")
+          .Append("drawbox=x=0:y=").Append(F(bottom)).Append(":w=iw:h=ih-").Append(F(bottom)).Append(":color=black@").Append(a).Append(":t=fill:enable='").Append(enable).Append("',")
+          .Append("drawbox=x=0:y=").Append(F(top)).Append(":w=").Append(F(left)).Append(":h=").Append(F(Math.Max(1, bottom - top))).Append(":color=black@").Append(a).Append(":t=fill:enable='").Append(enable).Append("',")
+          .Append("drawbox=x=").Append(F(right)).Append(":y=").Append(F(top)).Append(":w=iw-").Append(F(right)).Append(":h=").Append(F(Math.Max(1, bottom - top))).Append(":color=black@").Append(a).Append(":t=fill:enable='").Append(enable).Append("'[").Append(output).Append("]; ");
+    }
+
+    private static void AppendClickAudioGraph(StringBuilder sb, CursorEffectProfile profile, List<CaptureEvent> events, int? clickSoundInput, bool hasSourceAudio)
+    {
+        if (!profile.ClickSoundEnabled) return;
+        var clicks = events.Where(e => e.Type == "mouse_click").OrderBy(e => e.TimestampMs).Take(160).ToList();
+        if (clicks.Count == 0) return;
+
+        if (clickSoundInput is not null)
+        {
+            sb.Append('[').Append(clickSoundInput.Value).Append(":a]aresample=48000,atrim=0:0.14,asetpts=PTS-STARTPTS,volume=").Append(F(profile.ClickSoundVolume)).Append("[clickbase];");
         }
         else
         {
-            sb.Append('[').Append(last).Append("]null[outv]");
+            sb.Append("sine=frequency=980:sample_rate=48000:duration=0.045,afade=t=out:st=0.006:d=0.039,volume=").Append(F(profile.ClickSoundVolume * .45)).Append("[clickbase];");
         }
-        return sb.ToString();
+
+        if (clicks.Count == 1)
+        {
+            sb.Append("[clickbase]adelay=").Append(clicks[0].TimestampMs).Append('|').Append(clicks[0].TimestampMs).Append("[clickmix];");
+        }
+        else
+        {
+            sb.Append("[clickbase]asplit=").Append(clicks.Count);
+            for (var i = 0; i < clicks.Count; i++) sb.Append("[cs").Append(i).Append(']');
+            sb.Append(';');
+            for (var i = 0; i < clicks.Count; i++)
+            {
+                var delay = clicks[i].TimestampMs;
+                sb.Append("[cs").Append(i).Append("]adelay=").Append(delay).Append('|').Append(delay).Append("[cd").Append(i).Append("]; ");
+            }
+            for (var i = 0; i < clicks.Count; i++) sb.Append("[cd").Append(i).Append(']');
+            sb.Append("amix=inputs=").Append(clicks.Count).Append(":duration=longest:normalize=0[clickmix];");
+        }
+
+        if (hasSourceAudio)
+            sb.Append("[0:a:0]aresample=48000[basea];[basea][clickmix]amix=inputs=2:duration=first:normalize=0[outa];");
+        else
+            sb.Append("[clickmix]anull[outa];");
     }
 
     private static (string Scale, string X, string Y) BuildZoomExpressions(List<ZoomSegment> zooms, int width, int height)
@@ -176,34 +327,41 @@ public sealed class MotionRenderService
         return (scale, x, y);
     }
 
-    private static (string X0, string Y0, string X1, string Y1, string X2, string Y2, string X3, string Y3) BuildPerspectiveExpressions(List<Motion3DSegment> motions, int width, int height)
+    private static string BuildMotionProperty(
+        List<Motion3DSegment> motions,
+        Func<Motion3DSegment, double> segmentSelector,
+        Func<Motion3DKeyframe, double> keySelector,
+        double neutral)
     {
-        var x0 = "0"; var y0 = "0"; var x1 = "W"; var y1 = "0"; var x2 = "0"; var y2 = "H"; var x3 = "W"; var y3 = "H";
+        var result = F(neutral);
         foreach (var m in motions.AsEnumerable().Reverse())
         {
-            var p = MotionProgressExpr(m);
-            var ampX = F(Math.Clamp(m.RotateY * m.Perspective * m.Intensity / 45.0 * width * .09, -width * .14, width * .14));
-            var ampY = F(Math.Clamp(m.RotateX * m.Perspective * m.Intensity / 45.0 * height * .09, -height * .14, height * .14));
-            var enable = $"between(t,{S(m.StartMs)},{S(m.EndMs)})";
-            x0 = $"if({enable},({ampX})*({p}),{x0})";
-            x3 = $"if({enable},W-({ampX})*({p}),{x3})";
-            x1 = $"if({enable},W+({ampX})*({p}),{x1})";
-            x2 = $"if({enable},-({ampX})*({p}),{x2})";
-            y0 = $"if({enable},({ampY})*({p}),{y0})";
-            y1 = $"if({enable},-({ampY})*({p}),{y1})";
-            y2 = $"if({enable},H-({ampY})*({p}),{y2})";
-            y3 = $"if({enable},H+({ampY})*({p}),{y3})";
+            string value;
+            if (m.Keyframes.Count >= 2)
+                value = BuildKeyframedValue(m, keySelector);
+            else
+                value = $"{F(neutral)}+({F(segmentSelector(m) - neutral)})*({MotionProgressExpr(m)})";
+
+            value = $"{F(neutral)}+(({value})-{F(neutral)})*{F(Math.Clamp(m.Intensity, 0, 2))}";
+            result = $"if(between(t,{S(m.StartMs)},{S(m.EndMs)}),{value},{result})";
         }
-        return (x0, y0, x1, y1, x2, y2, x3, y3);
+        return result;
     }
 
-    private static string BuildMotionValue(List<Motion3DSegment> motions, Func<Motion3DSegment, double> selector, string fallback)
+    private static string BuildKeyframedValue(Motion3DSegment motion, Func<Motion3DKeyframe, double> selector)
     {
-        var result = fallback;
-        foreach (var m in motions.AsEnumerable().Reverse())
+        var keys = motion.Keyframes.OrderBy(k => k.TimeMs).ToList();
+        if (keys.Count == 0) return "0";
+        if (keys.Count == 1) return F(selector(keys[0]));
+        var result = F(selector(keys[^1]));
+        for (var i = keys.Count - 2; i >= 0; i--)
         {
-            var value = F(selector(m));
-            result = $"if(between(t,{S(m.StartMs)},{S(m.EndMs)}),({value})*({MotionProgressExpr(m)}),{result})";
+            var a = keys[i]; var b = keys[i + 1];
+            var duration = Math.Max(1, b.TimeMs - a.TimeMs) / 1000.0;
+            var p = $"min(1,max(0,((t-{S(a.TimeMs)})/{F(duration)})*{F(Math.Clamp(motion.Speed, .25, 3))}))";
+            var eased = EaseExpr(b.Easing, p);
+            var lerp = $"{F(selector(a))}+({F(selector(b) - selector(a))})*({eased})";
+            result = $"if(lte(t,{S(b.TimeMs)}),{lerp},{result})";
         }
         return result;
     }
@@ -212,17 +370,16 @@ public sealed class MotionRenderService
     {
         var start = S(startMs); var end = S(endMs);
         var inEnd = S(startMs + Math.Max(1, inMs)); var outStart = S(endMs - Math.Max(1, outMs));
-        var pin = $"(t-{start})/max(0.001,{F(Math.Max(1, inMs) / 1000.0)})";
-        var pout = $"({end}-t)/max(0.001,{F(Math.Max(1, outMs) / 1000.0)})";
+        var pin = $"min(1,max(0,(t-{start})/max(0.001,{F(Math.Max(1, inMs) / 1000.0)})))";
+        var pout = $"min(1,max(0,({end}-t)/max(0.001,{F(Math.Max(1, outMs) / 1000.0)})))";
         return $"if(lt(t,{inEnd}),{EaseExpr(easing, pin)},if(lte(t,{outStart}),1,{EaseExpr(easing, pout)}))";
     }
 
     private static string MotionProgressExpr(Motion3DSegment m)
     {
         var duration = Math.Max(1, m.EndMs - m.StartMs);
-        var p = $"(t-{S(m.StartMs)})/{F(duration / 1000.0)}";
-        var speedAdjusted = $"min(1,max(0,({p})*{F(m.Speed)}))";
-        return EaseExpr(m.Easing, speedAdjusted);
+        var p = $"min(1,max(0,((t-{S(m.StartMs)})/{F(duration / 1000.0)})*{F(Math.Clamp(m.Speed, .25, 3))}))";
+        return EaseExpr(m.Easing, p);
     }
 
     private static string EaseExpr(string easing, string p) => easing switch
@@ -243,19 +400,49 @@ public sealed class MotionRenderService
         var samples = events.Where(e => e.Type == "mouse_move" && e.X.HasValue && e.Y.HasValue && e.TimestampMs >= startMs && e.TimestampMs <= endMs)
             .OrderBy(e => e.TimestampMs).ToList();
         if (samples.Count < 2) return (F(x), F(y));
-        // Keep expressions manageable even in long recordings.
         var stride = Math.Max(1, samples.Count / 40);
         samples = samples.Where((_, i) => i % stride == 0).Take(42).ToList();
-        var ex = F(x); var ey = F(y);
+        return BuildPositionExpressions(samples, x, y);
+    }
+
+    private static (string X, string Y) BuildCursorPositionExpressions(List<CaptureEvent> events, double smoothing, int width, int height)
+    {
+        var moves = events.Where(e => e.Type == "mouse_move" && e.X.HasValue && e.Y.HasValue).OrderBy(e => e.TimestampMs).ToList();
+        if (moves.Count < 2) return (F(width / 2.0), F(height / 2.0));
+
+        var smooth = Math.Clamp(smoothing, 0, .95);
+        var filtered = new List<CaptureEvent>();
+        double sx = moves[0].X!.Value, sy = moves[0].Y!.Value;
+        foreach (var m in moves)
+        {
+            sx = sx * smooth + m.X!.Value * (1 - smooth);
+            sy = sy * smooth + m.Y!.Value * (1 - smooth);
+            filtered.Add(m with { X = (int)Math.Round(sx), Y = (int)Math.Round(sy) });
+        }
+        var stride = Math.Max(1, filtered.Count / 100);
+        var sampled = filtered.Where((_, i) => i % stride == 0).Take(105).ToList();
+        return BuildPositionExpressions(sampled, width / 2, height / 2);
+    }
+
+    private static (string X, string Y) BuildPositionExpressions(List<CaptureEvent> samples, int fallbackX, int fallbackY)
+    {
+        var ex = F(fallbackX); var ey = F(fallbackY);
         for (var i = samples.Count - 2; i >= 0; i--)
         {
             var a = samples[i]; var b = samples[i + 1];
             var dt = Math.Max(1, b.TimestampMs - a.TimestampMs) / 1000.0;
-            var p = $"(t-{S(a.TimestampMs)})/{F(dt)}";
+            var p = $"min(1,max(0,(t-{S(a.TimestampMs)})/{F(dt)}))";
             ex = $"if(between(t,{S(a.TimestampMs)},{S(b.TimestampMs)}),{F(a.X!.Value)}+({F(b.X!.Value - a.X.Value)})*({p}),{ex})";
             ey = $"if(between(t,{S(a.TimestampMs)},{S(b.TimestampMs)}),{F(a.Y!.Value)}+({F(b.Y!.Value - a.Y.Value)})*({p}),{ey})";
         }
         return (ex, ey);
+    }
+
+    private static string EnableExpr(IEnumerable<Motion3DSegment> motions)
+    {
+        var parts = motions.Select(m => $"between(t,{S(m.StartMs)},{S(m.EndMs)})").ToList();
+        if (parts.Count == 0) return "0";
+        return parts.Count == 1 ? parts[0] : string.Join('+', parts.Select(p => $"({p})"));
     }
 
     private static async Task<List<CaptureEvent>> LoadEventsAsync(string? path)
@@ -273,15 +460,30 @@ public sealed class MotionRenderService
     private static async Task<VideoInfo> ProbeAsync(string ffprobe, string path)
     {
         var start = new ProcessStartInfo { FileName = ffprobe, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
-        Add(start, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,r_frame_rate", "-of", "csv=p=0:s=x", path);
+        Add(start, "-v", "error", "-show_entries", "stream=codec_type,width,height,r_frame_rate", "-of", "json", path);
         using var p = Process.Start(start) ?? throw new InvalidOperationException("ffprobe could not start.");
-        var text = (await p.StandardOutput.ReadToEndAsync()).Trim();
+        var text = await p.StandardOutput.ReadToEndAsync();
         await p.WaitForExitAsync();
-        var values = text.Split('x');
-        if (values.Length < 3 || !int.TryParse(values[0], out var w) || !int.TryParse(values[1], out var h)) return new VideoInfo(1920, 1080, 60);
-        var fpsParts = values[2].Split('/');
-        var fps = fpsParts.Length == 2 && double.TryParse(fpsParts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var n) && double.TryParse(fpsParts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var d) && d != 0 ? n / d : 60;
-        return new VideoInfo(w, h, fps);
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var streams = doc.RootElement.GetProperty("streams").EnumerateArray().ToList();
+            var video = streams.FirstOrDefault(s => s.TryGetProperty("codec_type", out var t) && t.GetString() == "video");
+            var w = video.TryGetProperty("width", out var wp) ? wp.GetInt32() : 1920;
+            var h = video.TryGetProperty("height", out var hp) ? hp.GetInt32() : 1080;
+            var rate = video.TryGetProperty("r_frame_rate", out var rp) ? rp.GetString() ?? "60/1" : "60/1";
+            var parts = rate.Split('/');
+            var fps = parts.Length == 2 && double.TryParse(parts[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var n) && double.TryParse(parts[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var d) && d != 0 ? n / d : 60;
+            var hasAudio = streams.Any(s => s.TryGetProperty("codec_type", out var t) && t.GetString() == "audio");
+            return new VideoInfo(w, h, fps, hasAudio);
+        }
+        catch { return new VideoInfo(1920, 1080, 60, false); }
+    }
+
+    private static bool IsSupportedCursorImage(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+        return Path.GetExtension(path).ToLowerInvariant() is ".png" or ".bmp" or ".jpg" or ".jpeg" or ".webp" or ".ico";
     }
 
     private static string ResolveTool(string bundledName, string fallback)
@@ -292,49 +494,59 @@ public sealed class MotionRenderService
     private static void Add(ProcessStartInfo info, params string[] args) { foreach (var a in args) info.ArgumentList.Add(a); }
     private static string F(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
     private static string S(long ms) => F(ms / 1000.0);
-    private sealed record VideoInfo(int Width, int Height, double Fps);
+    private sealed record VideoInfo(int Width, int Height, double Fps, bool HasAudio);
 }
 
 internal static class CursorAssWriter
 {
-    public static async Task WriteAsync(string path, int width, int height, List<CaptureEvent> events, CursorEffectProfile profile)
+    public static async Task WriteAsync(string path, int width, int height, List<CaptureEvent> events, CursorEffectProfile profile, bool drawCursor)
     {
         var moves = events.Where(x => x.Type == "mouse_move" && x.X.HasValue && x.Y.HasValue).OrderBy(x => x.TimestampMs).ToList();
         var clicks = events.Where(x => x.Type == "mouse_click" && x.X.HasValue && x.Y.HasValue).OrderBy(x => x.TimestampMs).ToList();
-        if (profile.HideCursor || moves.Count == 0) { await File.WriteAllTextAsync(path, Header(width, height)); return; }
-
-        var smoothing = Math.Clamp(profile.Smoothing, 0, .95);
-        var filtered = new List<CaptureEvent>();
-        double sx = moves[0].X!.Value, sy = moves[0].Y!.Value;
-        long lastKept = -1000;
-        foreach (var move in moves)
-        {
-            sx = sx * smoothing + move.X!.Value * (1 - smoothing);
-            sy = sy * smoothing + move.Y!.Value * (1 - smoothing);
-            if (move.TimestampMs - lastKept < 28) continue;
-            lastKept = move.TimestampMs;
-            filtered.Add(move with { X = (int)Math.Round(sx), Y = (int)Math.Round(sy) });
-        }
-
         var sb = new StringBuilder(Header(width, height));
-        var cursorColor = AssColor(profile.Color, profile.Opacity);
-        var shadow = profile.Shadow ? "\\shad2" : "\\shad0";
-        var blur = profile.MotionBlur > .02 ? $"\\blur{(1 + profile.MotionBlur * 4).ToString("0.0", CultureInfo.InvariantCulture)}" : "";
-        var scale = (int)Math.Round(Math.Clamp(profile.Size, .5, 3) * 100);
-        var cursorPath = profile.Style switch
-        {
-            "Minimal Dot" => "m -5 0 b -5 -3 -3 -5 0 -5 b 3 -5 5 -3 5 0 b 5 3 3 5 0 5 b -3 5 -5 3 -5 0",
-            "High Contrast" => "m 0 0 l 0 28 l 7 20 l 13 34 l 19 31 l 13 18 l 26 18",
-            _ => "m 0 0 l 0 28 l 7 20 l 13 34 l 19 31 l 13 18 l 26 18"
-        };
 
-        for (var i = 0; i < filtered.Count - 1; i++)
+        if (drawCursor && !profile.HideCursor && moves.Count > 0)
         {
-            var a = filtered[i]; var b = filtered[i + 1];
-            var duration = Math.Max(20, b.TimestampMs - a.TimestampMs);
-            var tags = $"{{\\an7\\move({a.X},{a.Y},{b.X},{b.Y},0,{duration})\\p1\\fscx{scale}\\fscy{scale}\\bord1{shadow}{blur}\\1c{cursorColor}}}";
-            sb.Append("Dialogue: 10,").Append(Time(a.TimestampMs)).Append(',').Append(Time(a.TimestampMs + duration + 15)).Append(",Cursor,,0,0,0,,")
-              .Append(tags).Append(cursorPath).Append("{\\p0}\n");
+            var smoothing = Math.Clamp(profile.Smoothing, 0, .95);
+            var filtered = new List<CaptureEvent>();
+            double sx = moves[0].X!.Value, sy = moves[0].Y!.Value;
+            long lastKept = -1000;
+            foreach (var move in moves)
+            {
+                sx = sx * smoothing + move.X!.Value * (1 - smoothing);
+                sy = sy * smoothing + move.Y!.Value * (1 - smoothing);
+                if (move.TimestampMs - lastKept < 25) continue;
+                lastKept = move.TimestampMs;
+                filtered.Add(move with { X = (int)Math.Round(sx), Y = (int)Math.Round(sy) });
+            }
+
+            var cursorColor = AssColor(profile.Style == "AROMOTION Dark" ? "#151A22" : profile.Color, profile.Opacity);
+            var shadow = profile.Shadow ? $"\\shad{Math.Max(1, (int)Math.Round(2 + profile.ShadowOpacity * 3))}" : "\\shad0";
+            var scale = (int)Math.Round(Math.Clamp(profile.Size, .5, 3) * 100);
+            var cursorPath = profile.Style switch
+            {
+                "Minimal Dot" => "m -5 0 b -5 -3 -3 -5 0 -5 b 3 -5 5 -3 5 0 b 5 3 3 5 0 5 b -3 5 -5 3 -5 0",
+                "High Contrast" => "m 0 0 l 0 30 l 8 21 l 14 35 l 21 31 l 14 18 l 28 18",
+                _ => "m 0 0 l 0 28 l 7 20 l 13 34 l 19 31 l 13 18 l 26 18"
+            };
+
+            var trailLayers = profile.MotionBlur <= .04 ? 0 : Math.Clamp((int)Math.Round(profile.MotionBlur * 4), 1, 4);
+            for (var i = 0; i < filtered.Count - 1; i++)
+            {
+                var a = filtered[i]; var b = filtered[i + 1];
+                var duration = Math.Max(20, b.TimestampMs - a.TimestampMs);
+                for (var trail = trailLayers; trail >= 1; trail--)
+                {
+                    var previousIndex = Math.Max(0, i - trail);
+                    var pa = filtered[previousIndex];
+                    var pb = filtered[Math.Min(filtered.Count - 1, previousIndex + 1)];
+                    var alpha = 175 + trail * 16;
+                    var trailTags = $"{{\\an7\\move({pa.X},{pa.Y},{pb.X},{pb.Y},0,{duration})\\p1\\fscx{scale}\\fscy{scale}\\bord0\\shad0\\1c{cursorColor}\\alpha&H{Math.Clamp(alpha, 0, 245):X2}&}}";
+                    sb.Append("Dialogue: 4,").Append(Time(a.TimestampMs)).Append(',').Append(Time(a.TimestampMs + duration + 10)).Append(",Cursor,,0,0,0,,").Append(trailTags).Append(cursorPath).Append("{\\p0}\n");
+                }
+                var tags = $"{{\\an7\\move({a.X},{a.Y},{b.X},{b.Y},0,{duration})\\p1\\fscx{scale}\\fscy{scale}\\bord1{shadow}\\1c{cursorColor}}}";
+                sb.Append("Dialogue: 10,").Append(Time(a.TimestampMs)).Append(',').Append(Time(a.TimestampMs + duration + 15)).Append(",Cursor,,0,0,0,,").Append(tags).Append(cursorPath).Append("{\\p0}\n");
+            }
         }
 
         if (!profile.ClickRingStyle.Equals("None", StringComparison.OrdinalIgnoreCase))
@@ -344,10 +556,9 @@ internal static class CursorAssWriter
                 var duration = Math.Max(120, profile.ClickAnimationMs);
                 var color = AssColor(click.Button == "right" ? profile.RightClickColor : profile.LeftClickColor, .95);
                 var circle = "m -10 0 b -10 -6 -6 -10 0 -10 b 6 -10 10 -6 10 0 b 10 6 6 10 0 10 b -6 10 -10 6 -10 0";
-                var endScale = profile.ClickRingStyle == "Solid" ? 115 : profile.ClickRingStyle == "Ripple" ? 260 : 200;
+                var endScale = profile.ClickRingStyle == "Solid" ? 115 : profile.ClickRingStyle == "Ripple" ? 270 : 205;
                 var tags = $"{{\\an5\\pos({click.X},{click.Y})\\p1\\fscx55\\fscy55\\bord2\\shad0\\1c{color}\\alpha&H20&\\t(0,{duration},\\fscx{endScale}\\fscy{endScale}\\alpha&HFF&)}}";
-                sb.Append("Dialogue: 20,").Append(Time(click.TimestampMs)).Append(',').Append(Time(click.TimestampMs + duration)).Append(",Click,,0,0,0,,")
-                  .Append(tags).Append(circle).Append("{\\p0}\n");
+                sb.Append("Dialogue: 20,").Append(Time(click.TimestampMs)).Append(',').Append(Time(click.TimestampMs + duration)).Append(",Click,,0,0,0,,").Append(tags).Append(circle).Append("{\\p0}\n");
             }
         }
         await File.WriteAllTextAsync(path, sb.ToString(), new UTF8Encoding(false));
