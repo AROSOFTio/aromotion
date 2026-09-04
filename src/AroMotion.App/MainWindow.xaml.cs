@@ -56,11 +56,9 @@ public partial class MainWindow : Window
             _session = await ProjectSession.CreateAsync(rootDirectory, qualityName, fps);
             SessionPathText.Text = _session.ProjectDirectory;
             OpenFolderButton.IsEnabled = true;
+            MotionEditorButton.IsEnabled = false;
             RecorderLogText.Text = "Starting FFmpeg lossless capture…";
 
-            // Video begins first; interaction metadata begins immediately after the
-            // FFmpeg process confirms it is alive. A later milestone will add an
-            // explicit frame-clock synchronization anchor.
             await _recorder.StartAsync(_session.VideoPath, fps, quality);
             await _inputHook.StartAsync(_session.EventsPath);
 
@@ -78,7 +76,7 @@ public partial class MainWindow : Window
 
             MessageBox.Show(
                 this,
-                $"Recording could not start.\n\n{ex.Message}\n\nFor this development build, FFmpeg must be available on PATH or at tools\\ffmpeg\\ffmpeg.exe next to the application.",
+                $"Recording could not start.\n\n{ex.Message}\n\nFFmpeg must be bundled at tools\\ffmpeg\\ffmpeg.exe next to the app, or available on PATH.",
                 "AROMOTION recorder error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -97,16 +95,18 @@ public partial class MainWindow : Window
 
         try
         {
-            // Stop event capture first so metadata never extends beyond the video.
             await _inputHook.StopAsync();
             await _recorder.StopAsync();
 
             if (_session is not null)
             {
-                await _session.CompleteAsync();
+                var generator = new AutoZoomGenerator();
+                var zooms = await generator.GenerateAsync(_session.EventsPath);
+                await _session.CompleteAsync(zooms);
+                MotionEditorButton.IsEnabled = File.Exists(_session.EventsPath);
             }
 
-            RecorderLogText.Text = "Recording finalized. Lossless master and interaction metadata saved.";
+            RecorderLogText.Text = "Recording finalized. Clean master and interaction metadata saved. Motion Editor is ready.";
         }
         catch (Exception ex)
         {
@@ -126,7 +126,6 @@ public partial class MainWindow : Window
         }
         catch
         {
-            // Best-effort cleanup during a failed start.
         }
 
         try
@@ -135,7 +134,6 @@ public partial class MainWindow : Window
         }
         catch
         {
-            // Best-effort cleanup during a failed start.
         }
     }
 
@@ -169,6 +167,21 @@ public partial class MainWindow : Window
         });
     }
 
+    private void OpenMotionEditor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_session is null || !Directory.Exists(_session.ProjectDirectory) || !File.Exists(_session.EventsPath))
+        {
+            MessageBox.Show(this, "Record and stop a session first so AROMOTION has interaction metadata to edit.", "Motion Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var editor = new MotionEditorWindow(_session.ProjectDirectory, _session.EventsPath)
+        {
+            Owner = this
+        };
+        editor.Show();
+    }
+
     private int GetSelectedFps()
     {
         if (FpsComboBox.SelectedItem is System.Windows.Controls.ComboBoxItem item
@@ -185,6 +198,7 @@ public partial class MainWindow : Window
         HeaderStatusText.Text = starting ? "STARTING…" : "● RECORDING";
         RecordButton.IsEnabled = false;
         StopButton.IsEnabled = false;
+        MotionEditorButton.IsEnabled = false;
     }
 
     private void SetUiIdleState()
@@ -201,7 +215,6 @@ public partial class MainWindow : Window
     {
         Dispatcher.InvokeAsync(() =>
         {
-            // Keep the UI light; this is a status surface, not the full log file.
             RecorderLogText.Text = line.Length > 220 ? line[^220..] : line;
         });
     }
