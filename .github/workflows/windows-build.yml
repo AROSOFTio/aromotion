@@ -1,10 +1,9 @@
 name: Windows Portable Build
 
+# Temporarily manual-only: GitHub is currently failing these jobs before a runner
+# starts (runner_id=0 / zero steps), so push-triggered builds only create misleading
+# red checks. The workflow remains ready to dispatch when runner availability returns.
 on:
-  push:
-    branches:
-      - main
-      - feature/motion-effects-parity
   workflow_dispatch:
 
 jobs:
@@ -21,7 +20,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore Windows x64
-        run: dotnet restore src/AroMotion.App/AroMotion.App.csproj -r win-x64
+        run: dotnet restore src/AroMotion.App/AroMotion.App.csproj -r win-x64 -p:EnableWindowsTargeting=true
 
       - name: Publish self-contained AROMOTION
         run: >-
@@ -30,6 +29,7 @@ jobs:
           -r win-x64
           --self-contained true
           --no-restore
+          -p:EnableWindowsTargeting=true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:DebugType=None
@@ -60,14 +60,13 @@ jobs:
 
           1. Extract this ZIP anywhere you can write, for example Downloads\AROMOTION-Test.
           2. Double-click AROMOTION.exe.
-          3. Do NOT move AROMOTION.exe away from its tools folder.
+          3. Keep the tools folder beside AROMOTION.exe.
           4. Record a short 15–30 second test with several clicks.
           5. Stop, then click Open Motion Editor.
-          6. Test: drag/resize zoom blocks, click preview to change focus, 3D presets/sliders,
-             cursor styles/rings, spotlight, privacy blur, then Render preview.
+          6. Test drag/resize zoom blocks, 3D presets/keyframes, cursor effects,
+             spotlight, privacy blur, then Render preview.
 
-          This build is self-contained and does not install anything into Program Files,
-          does not write HKLM registry keys, and does not require Administrator rights.
+          This build is self-contained and does not require Administrator rights.
           '@ | Set-Content 'artifacts/AROMOTION-win-x64/TEST-NO-ADMIN.txt' -Encoding UTF8
 
       - name: Upload portable Windows build
