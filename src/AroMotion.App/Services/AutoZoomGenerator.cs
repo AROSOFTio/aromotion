@@ -7,6 +7,7 @@ public sealed class AutoZoomOptions
 {
     public bool FromClicks { get; set; } = true;
     public bool FromShortcuts { get; set; } = true;
+    public bool FromTyping { get; set; } = true;
     public bool FromFocusEvents { get; set; } = true;
     public bool CursorFollow { get; set; }
     public bool SmartFraming { get; set; } = true;
@@ -23,13 +24,10 @@ public sealed class AutoZoomOptions
 
 public sealed class AutoZoomGenerator
 {
-    public async Task<IReadOnlyList<ZoomSegment>> GenerateAsync(
-        string eventsPath,
-        AutoZoomOptions? options = null)
+    public async Task<IReadOnlyList<ZoomSegment>> GenerateAsync(string eventsPath, AutoZoomOptions? options = null)
     {
         options ??= new AutoZoomOptions();
         if (!File.Exists(eventsPath)) return Array.Empty<ZoomSegment>();
-
         var events = await LoadEventsAsync(eventsPath);
         var focusFrames = Path.Combine(Path.GetDirectoryName(eventsPath)!, "focus-frames.jsonl");
         if (File.Exists(focusFrames)) events.AddRange(await LoadEventsAsync(focusFrames));
@@ -62,6 +60,7 @@ public sealed class AutoZoomGenerator
             {
                 "mouse_click" => options.FromClicks && evt.Button == "left",
                 "shortcut" => options.FromShortcuts,
+                "typing_activity" => options.FromTyping,
                 "focus_frame" or "focus_change" => options.FromFocusEvents,
                 _ => false
             };
@@ -71,11 +70,8 @@ public sealed class AutoZoomGenerator
             if ((!anchor.X.HasValue || !anchor.Y.HasValue) && lastPointer is not null)
                 anchor = anchor with { X = lastPointer.X, Y = lastPointer.Y };
 
-            // Attach the nearest smart native control/window frame to normal click
-            // or shortcut events. This gives Chromium/native apps a useful frame
-            // even though the mouse hook and WinEvent hook are independent.
             if (options.SmartFraming && anchor.FrameWidth is null && lastSmartFrame is not null
-                && Math.Abs(anchor.TimestampMs - lastSmartFrame.TimestampMs) <= 500)
+                && Math.Abs(anchor.TimestampMs - lastSmartFrame.TimestampMs) <= 900)
             {
                 anchor = anchor with
                 {
@@ -86,39 +82,26 @@ public sealed class AutoZoomGenerator
                     WindowTitle = lastSmartFrame.WindowTitle
                 };
             }
-
             if (!anchor.X.HasValue || !anchor.Y.HasValue) continue;
 
             var source = evt.Type switch
             {
                 "mouse_click" => "auto-click",
-                "shortcut" => "auto-typing-focus",
+                "shortcut" => "auto-shortcut-focus",
+                "typing_activity" => "auto-typing-focus",
                 _ => "auto-focus"
             };
             AddOrMerge(segments, CreateSegment(anchor, options, source, options.DefaultScale), options);
         }
-
         return segments;
     }
 
-    public ZoomSegment CreateManual(long atMs, int x, int y, double scale = 1.75, string style = "Focus")
+    public ZoomSegment CreateManual(long atMs, int x, int y, double scale = 1.75, string style = "Focus") => new()
     {
-        return new ZoomSegment
-        {
-            StartMs = Math.Max(0, atMs - 180),
-            EndMs = atMs + 1550,
-            FocusX = x,
-            FocusY = y,
-            Scale = Math.Clamp(scale, 1.05, 4.0),
-            Easing = "cubic-in-out",
-            Source = "manual",
-            Style = style,
-            ZoomInMs = 280,
-            HoldMs = 950,
-            ZoomOutMs = 320,
-            SmartFrame = false
-        };
-    }
+        StartMs = Math.Max(0, atMs - 180), EndMs = atMs + 1550, FocusX = x, FocusY = y,
+        Scale = Math.Clamp(scale, 1.05, 4.0), Easing = "cubic-in-out", Source = "manual", Style = style,
+        ZoomInMs = 280, HoldMs = 950, ZoomOutMs = 320, SmartFrame = false
+    };
 
     private static async Task<List<CaptureEvent>> LoadEventsAsync(string path)
     {
@@ -126,12 +109,7 @@ public sealed class AutoZoomGenerator
         await foreach (var line in File.ReadLinesAsync(path))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            try
-            {
-                var evt = JsonSerializer.Deserialize<CaptureEvent>(line);
-                if (evt is not null) result.Add(evt);
-            }
-            catch (JsonException) { }
+            try { var evt = JsonSerializer.Deserialize<CaptureEvent>(line); if (evt is not null) result.Add(evt); } catch (JsonException) { }
         }
         return result;
     }
@@ -139,29 +117,17 @@ public sealed class AutoZoomGenerator
     private static ZoomSegment CreateSegment(CaptureEvent evt, AutoZoomOptions options, string source, double scale)
     {
         var start = Math.Max(0, evt.TimestampMs - options.LeadInMs);
-        var end = start + options.ZoomInMs + options.HoldMs + options.ZoomOutMs;
         var segment = new ZoomSegment
         {
-            StartMs = start,
-            EndMs = end,
-            FocusX = evt.X!.Value,
-            FocusY = evt.Y!.Value,
-            Scale = Math.Clamp(scale, 1.05, 4.0),
-            Easing = options.Easing,
-            Source = source,
-            Style = options.Style,
-            ZoomInMs = options.ZoomInMs,
-            HoldMs = options.HoldMs,
-            ZoomOutMs = options.ZoomOutMs,
+            StartMs = start, EndMs = start + options.ZoomInMs + options.HoldMs + options.ZoomOutMs,
+            FocusX = evt.X!.Value, FocusY = evt.Y!.Value, Scale = Math.Clamp(scale, 1.05, 4.0),
+            Easing = options.Easing, Source = source, Style = options.Style,
+            ZoomInMs = options.ZoomInMs, HoldMs = options.HoldMs, ZoomOutMs = options.ZoomOutMs,
             SmartFrame = options.SmartFraming
         };
-
         if (options.SmartFraming && evt.FrameWidth is > 8 && evt.FrameHeight is > 8)
         {
-            segment.FrameX = evt.FrameX;
-            segment.FrameY = evt.FrameY;
-            segment.FrameWidth = evt.FrameWidth;
-            segment.FrameHeight = evt.FrameHeight;
+            segment.FrameX = evt.FrameX; segment.FrameY = evt.FrameY; segment.FrameWidth = evt.FrameWidth; segment.FrameHeight = evt.FrameHeight;
             segment.FocusX = evt.FrameX!.Value + evt.FrameWidth.Value / 2;
             segment.FocusY = evt.FrameY!.Value + evt.FrameHeight.Value / 2;
         }
@@ -175,12 +141,8 @@ public sealed class AutoZoomGenerator
         if (incoming.StartMs - previous.EndMs <= options.MergeWindowMs)
         {
             previous.EndMs = Math.Max(previous.EndMs, incoming.EndMs);
-            previous.FocusX = incoming.FocusX;
-            previous.FocusY = incoming.FocusY;
-            previous.FrameX = incoming.FrameX;
-            previous.FrameY = incoming.FrameY;
-            previous.FrameWidth = incoming.FrameWidth;
-            previous.FrameHeight = incoming.FrameHeight;
+            previous.FocusX = incoming.FocusX; previous.FocusY = incoming.FocusY;
+            previous.FrameX = incoming.FrameX; previous.FrameY = incoming.FrameY; previous.FrameWidth = incoming.FrameWidth; previous.FrameHeight = incoming.FrameHeight;
             previous.Source = previous.Source == incoming.Source ? previous.Source : "auto-merged";
             return;
         }
