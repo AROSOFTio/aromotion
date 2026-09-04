@@ -1,182 +1,110 @@
 <Window x:Class="AroMotion.App.MotionEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AROMOTION Studio — Motion Editor" Width="1440" Height="900"
+        Title="AROMOTION Studio — Motion Editor" Width="1480" Height="930"
         MinWidth="1180" MinHeight="720" WindowStartupLocation="CenterOwner"
         Background="#0B0D12" Foreground="#F5F7FB">
     <Window.Resources>
         <SolidColorBrush x:Key="Panel" Color="#141821"/>
-        <SolidColorBrush x:Key="Panel2" Color="#1B202B"/>
         <SolidColorBrush x:Key="Border" Color="#2A3140"/>
-        <SolidColorBrush x:Key="Accent" Color="#7C5CFF"/>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#202636"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#30384A"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Margin" Value="3"/>
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#0E1118"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#30384A"/>
-            <Setter Property="Padding" Value="7,5"/>
-        </Style>
-        <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="#0E1118"/>
-            <Setter Property="Foreground" Value="Black"/>
-            <Setter Property="Padding" Value="6,4"/>
-        </Style>
-        <Style TargetType="CheckBox">
-            <Setter Property="Margin" Value="0,4"/>
-            <Setter Property="Foreground" Value="#E7EBF4"/>
-        </Style>
+        <Style TargetType="Button"><Setter Property="Background" Value="#202636"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="#30384A"/><Setter Property="Padding" Value="12,8"/><Setter Property="Margin" Value="3"/></Style>
+        <Style TargetType="TextBox"><Setter Property="Background" Value="#0E1118"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderBrush" Value="#30384A"/><Setter Property="Padding" Value="7,5"/></Style>
+        <Style TargetType="ComboBox"><Setter Property="Background" Value="#0E1118"/><Setter Property="Foreground" Value="Black"/><Setter Property="Padding" Value="6,4"/></Style>
+        <Style TargetType="CheckBox"><Setter Property="Margin" Value="0,4"/><Setter Property="Foreground" Value="#E7EBF4"/></Style>
+        <Style TargetType="TextBlock"><Setter Property="TextOptions.TextFormattingMode" Value="Display"/></Style>
     </Window.Resources>
 
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="62"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="238"/>
-        </Grid.RowDefinitions>
-
+        <Grid.RowDefinitions><RowDefinition Height="62"/><RowDefinition Height="*"/><RowDefinition Height="246"/></Grid.RowDefinitions>
         <Border Grid.Row="0" Background="#11151D" BorderBrush="#252C39" BorderThickness="0,0,0,1" Padding="18,10">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="AROMOTION" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
-                    <Border Background="#232A39" CornerRadius="10" Padding="10,4" Margin="12,0,0,0">
-                        <TextBlock Text="MOTION EDITOR" Foreground="#B9C4D8" FontSize="11" FontWeight="SemiBold"/>
-                    </Border>
+                    <Border Background="#232A39" CornerRadius="10" Padding="10,4" Margin="12,0,0,0"><TextBlock Text="MOTION EDITOR" Foreground="#B9C4D8" FontSize="11" FontWeight="SemiBold"/></Border>
                     <TextBlock x:Name="ProjectNameText" Text="No project" Foreground="#7F8AA0" Margin="18,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Save project" Click="Save_Click"/>
-                    <Button Content="Render preview" Click="Render_Click" Background="#6E51E8" BorderBrush="#8B72FF"/>
-                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Save project" Click="Save_Click"/><Button Content="Render preview" Click="Render_Click" Background="#6E51E8" BorderBrush="#8B72FF"/></StackPanel>
             </DockPanel>
         </Border>
 
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="184"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="330"/>
-            </Grid.ColumnDefinitions>
-
+            <Grid.ColumnDefinitions><ColumnDefinition Width="205"/><ColumnDefinition Width="*"/><ColumnDefinition Width="352"/></Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="#10141C" BorderBrush="#252C39" BorderThickness="0,0,1,0" Padding="12">
-                <StackPanel>
-                    <TextBlock Text="ADD EFFECT" Foreground="#758198" FontSize="11" FontWeight="Bold" Margin="4,4,0,8"/>
-                    <Button Content="＋ Manual Zoom" Click="AddZoom_Click"/>
-                    <Button Content="⚡ Generate Auto Zooms" Click="AutoZoom_Click"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+                    <TextBlock Text="AUTO / ZOOM" Foreground="#758198" FontSize="11" FontWeight="Bold" Margin="4,4,0,8"/>
+                    <Button Content="＋ Manual Zoom" Click="AddZoom_Click"/><Button Content="⚡ Generate Auto Zooms" Click="AutoZoom_Click"/>
+                    <CheckBox x:Name="AutoClickCheck" Content="Clicks" IsChecked="True"/><CheckBox x:Name="AutoTypingCheck" Content="Typing/focus activity" IsChecked="True"/><CheckBox x:Name="AutoFocusCheck" Content="Focus changes" IsChecked="True"/>
                     <Separator Margin="4,8" Background="#2A3140"/>
                     <TextBlock Text="3D MOTION" Foreground="#758198" FontSize="11" FontWeight="Bold" Margin="4,4,0,6"/>
-                    <ComboBox x:Name="PresetCombo" SelectedIndex="0" Margin="3">
-                        <ComboBoxItem Content="Focus"/><ComboBoxItem Content="Push"/><ComboBoxItem Content="Tilt"/><ComboBoxItem Content="Reveal"/><ComboBoxItem Content="Orbit"/>
-                    </ComboBox>
-                    <Button Content="＋ Add 3D Motion" Click="Add3D_Click"/>
+                    <ComboBox x:Name="PresetCombo" SelectedIndex="0"><ComboBoxItem Content="Focus"/><ComboBoxItem Content="Push"/><ComboBoxItem Content="Tilt"/><ComboBoxItem Content="Reveal"/><ComboBoxItem Content="Orbit"/></ComboBox>
+                    <Button Content="＋ Add 3D Motion" Click="Add3D_Click"/><Button Content="⚡ Auto 3D from Zooms" Click="Auto3D_Click"/>
                     <Separator Margin="4,8" Background="#2A3140"/>
                     <TextBlock Text="PRIVACY / FOCUS" Foreground="#758198" FontSize="11" FontWeight="Bold" Margin="4,4,0,6"/>
-                    <Button Content="◎ Spotlight" Click="AddSpotlight_Click"/>
-                    <Button Content="▦ Privacy Blur" Click="AddBlur_Click"/>
+                    <Button Content="◎ Spotlight" Click="AddSpotlight_Click"/><Button Content="▦ Privacy Blur" Click="AddBlur_Click"/>
                     <Separator Margin="4,8" Background="#2A3140"/>
                     <TextBlock Text="TIP" Foreground="#758198" FontSize="11" FontWeight="Bold" Margin="4,4,0,6"/>
-                    <TextBlock Text="Click the video preview to move the selected zoom focus point. Drag zoom blocks on the timeline; drag either edge to resize." Foreground="#8F9AAF" TextWrapping="Wrap" FontSize="11" Margin="4"/>
-                </StackPanel>
+                    <TextBlock Text="Click the preview to move the selected zoom/spotlight/blur. Drag timeline blocks to move them; drag either edge to resize." Foreground="#8F9AAF" TextWrapping="Wrap" FontSize="11" Margin="4"/>
+                </StackPanel></ScrollViewer>
             </Border>
 
             <Grid Grid.Column="1" Background="#090B0F">
                 <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="42"/></Grid.RowDefinitions>
                 <Border Margin="18" Background="#050607" CornerRadius="12" BorderBrush="#252C39" BorderThickness="1" ClipToBounds="True">
-                    <Grid x:Name="PreviewHost" Background="Black" MouseLeftButtonDown="Preview_MouseLeftButtonDown">
-                        <MediaElement x:Name="PreviewMedia" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Uniform" ScrubbingEnabled="True" MediaOpened="PreviewMedia_MediaOpened"/>
-                        <Canvas x:Name="PreviewOverlay" IsHitTestVisible="False"/>
-                    </Grid>
+                    <Grid x:Name="PreviewHost" Background="Black" MouseLeftButtonDown="Preview_MouseLeftButtonDown"><MediaElement x:Name="PreviewMedia" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Uniform" ScrubbingEnabled="True" MediaOpened="PreviewMedia_MediaOpened"/><Canvas x:Name="PreviewOverlay" IsHitTestVisible="False"/></Grid>
                 </Border>
-                <Grid Grid.Row="1" Margin="18,0,18,8">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Content="▶ / ❚❚" Click="PlayPause_Click" Padding="10,4"/>
-                    <Slider x:Name="PlayheadSlider" Grid.Column="1" Minimum="0" Maximum="1" ValueChanged="PlayheadSlider_ValueChanged" Margin="10,0"/>
-                    <TextBlock x:Name="TimeText" Grid.Column="2" Text="00:00.000" Foreground="#9AA5BA" VerticalAlignment="Center"/>
-                </Grid>
+                <Grid Grid.Row="1" Margin="18,0,18,8"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Button Grid.Column="0" Content="▶ / ❚❚" Click="PlayPause_Click" Padding="10,4"/><Slider x:Name="PlayheadSlider" Grid.Column="1" Minimum="0" Maximum="1" ValueChanged="PlayheadSlider_ValueChanged" Margin="10,0"/><TextBlock x:Name="TimeText" Grid.Column="2" Text="00:00.000" Foreground="#9AA5BA" VerticalAlignment="Center"/></Grid>
             </Grid>
 
             <Border Grid.Column="2" Background="#10141C" BorderBrush="#252C39" BorderThickness="1,0,0,0" Padding="12">
                 <TabControl x:Name="InspectorTabs" Background="#10141C" Foreground="White">
-                    <TabItem Header="Zoom">
-                        <ScrollViewer><StackPanel Margin="10">
-                            <TextBlock Text="Selected zoom" FontWeight="Bold" Margin="0,0,0,8"/>
-                            <TextBlock Text="Scale"/><Slider x:Name="ZoomScaleSlider" Minimum="1.05" Maximum="4" Value="1.75" TickFrequency="0.05" ValueChanged="ZoomProperty_Changed"/>
-                            <TextBlock Text="Easing" Margin="0,8,0,0"/><ComboBox x:Name="ZoomEasingCombo" SelectionChanged="ZoomProperty_Changed">
-                                <ComboBoxItem Content="linear"/><ComboBoxItem Content="smoothstep"/><ComboBoxItem Content="cubic-in"/><ComboBoxItem Content="cubic-out"/><ComboBoxItem Content="cubic-in-out"/><ComboBoxItem Content="spring-soft"/><ComboBoxItem Content="spring-snappy"/>
-                            </ComboBox>
-                            <TextBlock Text="Style" Margin="0,8,0,0"/><ComboBox x:Name="ZoomStyleCombo" SelectionChanged="ZoomProperty_Changed">
-                                <ComboBoxItem Content="Focus"/><ComboBoxItem Content="Push"/><ComboBoxItem Content="Soft"/><ComboBoxItem Content="Snap"/><ComboBoxItem Content="Cursor Follow"/>
-                            </ComboBox>
-                            <TextBlock Text="Zoom in (ms)" Margin="0,8,0,0"/><TextBox x:Name="ZoomInText" TextChanged="ZoomProperty_Changed"/>
-                            <TextBlock Text="Hold (ms)" Margin="0,8,0,0"/><TextBox x:Name="ZoomHoldText" TextChanged="ZoomProperty_Changed"/>
-                            <TextBlock Text="Zoom out (ms)" Margin="0,8,0,0"/><TextBox x:Name="ZoomOutText" TextChanged="ZoomProperty_Changed"/>
-                            <CheckBox x:Name="SmartFrameCheck" Content="Smart UI-element framing" IsChecked="True" Checked="ZoomProperty_Changed" Unchecked="ZoomProperty_Changed"/>
-                            <Button Content="Delete zoom" Click="DeleteZoom_Click" Background="#42202B" BorderBrush="#6E3343"/>
-                        </StackPanel></ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="3D">
-                        <ScrollViewer><StackPanel Margin="10">
-                            <TextBlock Text="3D camera" FontWeight="Bold" Margin="0,0,0,8"/>
-                            <TextBlock Text="Rotate X"/><Slider x:Name="RotateXSlider" Minimum="-45" Maximum="45" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Rotate Y"/><Slider x:Name="RotateYSlider" Minimum="-45" Maximum="45" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Rotate Z"/><Slider x:Name="RotateZSlider" Minimum="-20" Maximum="20" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Depth / Z"/><Slider x:Name="DepthSlider" Minimum="-40" Maximum="60" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Pan X"/><Slider x:Name="PanXSlider" Minimum="-50" Maximum="50" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Pan Y"/><Slider x:Name="PanYSlider" Minimum="-50" Maximum="50" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Perspective"/><Slider x:Name="PerspectiveSlider" Minimum="0" Maximum="2" Value="1" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Speed"/><Slider x:Name="SpeedSlider" Minimum="0.25" Maximum="3" Value="1" ValueChanged="ThreeDProperty_Changed"/>
-                            <TextBlock Text="Intensity"/><Slider x:Name="IntensitySlider" Minimum="0" Maximum="2" Value="1" ValueChanged="ThreeDProperty_Changed"/>
-                            <CheckBox x:Name="ShadowCheck" Content="Screen shadow" IsChecked="True" Checked="ThreeDProperty_Changed" Unchecked="ThreeDProperty_Changed"/>
-                            <CheckBox x:Name="ReflectionCheck" Content="Screen reflection" Checked="ThreeDProperty_Changed" Unchecked="ThreeDProperty_Changed"/>
-                            <Button Content="Delete 3D motion" Click="Delete3D_Click" Background="#42202B" BorderBrush="#6E3343"/>
-                        </StackPanel></ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="Cursor">
-                        <ScrollViewer><StackPanel Margin="10">
-                            <TextBlock Text="Cursor replacement" FontWeight="Bold" Margin="0,0,0,8"/>
-                            <ComboBox x:Name="CursorStyleCombo" SelectedIndex="0" SelectionChanged="CursorProperty_Changed"><ComboBoxItem Content="AROMOTION White"/><ComboBoxItem Content="AROMOTION Dark"/><ComboBoxItem Content="Minimal Dot"/><ComboBoxItem Content="High Contrast"/><ComboBoxItem Content="Custom"/></ComboBox>
-                            <CheckBox x:Name="ReplaceCursorCheck" Content="Replace original cursor" IsChecked="True" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
-                            <CheckBox x:Name="HideCursorCheck" Content="Hide cursor" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
-                            <CheckBox x:Name="CursorShadowCheck" Content="Cursor shadow" IsChecked="True" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
-                            <TextBlock Text="Size"/><Slider x:Name="CursorSizeSlider" Minimum="0.5" Maximum="3" Value="1" ValueChanged="CursorProperty_Changed"/>
-                            <TextBlock Text="Opacity"/><Slider x:Name="CursorOpacitySlider" Minimum="0.1" Maximum="1" Value="1" ValueChanged="CursorProperty_Changed"/>
-                            <TextBlock Text="Smoothing"/><Slider x:Name="CursorSmoothingSlider" Minimum="0" Maximum="1" Value="0.68" ValueChanged="CursorProperty_Changed"/>
-                            <TextBlock Text="Motion blur"/><Slider x:Name="CursorBlurSlider" Minimum="0" Maximum="1" Value="0.25" ValueChanged="CursorProperty_Changed"/>
-                            <ComboBox x:Name="ClickRingCombo" SelectedIndex="0" SelectionChanged="CursorProperty_Changed"><ComboBoxItem Content="Pulse"/><ComboBoxItem Content="Ripple"/><ComboBoxItem Content="Solid"/><ComboBoxItem Content="None"/></ComboBox>
-                            <CheckBox x:Name="ClickSoundCheck" Content="Click sound" IsChecked="True" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
-                            <CheckBox x:Name="CursorFollowCheck" Content="Cursor-follow zoom mode" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
-                        </StackPanel></ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="Privacy">
-                        <ScrollViewer><StackPanel Margin="10">
-                            <TextBlock Text="Spotlight / blur properties are editable from their timeline rows." TextWrapping="Wrap" Foreground="#AEB8CB"/>
-                            <TextBlock Text="Spotlight darkness" Margin="0,12,0,0"/><Slider x:Name="SpotlightDarknessSlider" Minimum="0" Maximum="0.95" Value="0.68" ValueChanged="PrivacyProperty_Changed"/>
-                            <TextBlock Text="Spotlight feather"/><Slider x:Name="SpotlightFeatherSlider" Minimum="0" Maximum="80" Value="28" ValueChanged="PrivacyProperty_Changed"/>
-                            <CheckBox x:Name="SpotlightFollowCheck" Content="Spotlight follows cursor" Checked="PrivacyProperty_Changed" Unchecked="PrivacyProperty_Changed"/>
-                            <TextBlock Text="Blur intensity" Margin="0,12,0,0"/><Slider x:Name="BlurIntensitySlider" Minimum="1" Maximum="50" Value="18" ValueChanged="PrivacyProperty_Changed"/>
-                            <CheckBox x:Name="BlurTrackCheck" Content="Track cursor / moving blur" Checked="PrivacyProperty_Changed" Unchecked="PrivacyProperty_Changed"/>
-                        </StackPanel></ScrollViewer>
-                    </TabItem>
+                    <TabItem Header="Zoom"><ScrollViewer><StackPanel Margin="10">
+                        <TextBlock Text="Selected zoom" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Scale"/><Slider x:Name="ZoomScaleSlider" Minimum="1.05" Maximum="4" Value="1.75" TickFrequency="0.05" ValueChanged="ZoomProperty_Changed"/>
+                        <TextBlock Text="Easing" Margin="0,8,0,0"/><ComboBox x:Name="ZoomEasingCombo" SelectionChanged="ZoomProperty_Changed"><ComboBoxItem Content="linear"/><ComboBoxItem Content="smoothstep"/><ComboBoxItem Content="cubic-in"/><ComboBoxItem Content="cubic-out"/><ComboBoxItem Content="cubic-in-out"/><ComboBoxItem Content="spring-soft"/><ComboBoxItem Content="spring-snappy"/></ComboBox>
+                        <TextBlock Text="Style" Margin="0,8,0,0"/><ComboBox x:Name="ZoomStyleCombo" SelectionChanged="ZoomProperty_Changed"><ComboBoxItem Content="Focus"/><ComboBoxItem Content="Push"/><ComboBoxItem Content="Soft"/><ComboBoxItem Content="Snap"/><ComboBoxItem Content="Cursor Follow"/></ComboBox>
+                        <TextBlock Text="Zoom in (ms)" Margin="0,8,0,0"/><TextBox x:Name="ZoomInText" TextChanged="ZoomProperty_Changed"/><TextBlock Text="Hold (ms)" Margin="0,8,0,0"/><TextBox x:Name="ZoomHoldText" TextChanged="ZoomProperty_Changed"/><TextBlock Text="Zoom out (ms)" Margin="0,8,0,0"/><TextBox x:Name="ZoomOutText" TextChanged="ZoomProperty_Changed"/>
+                        <CheckBox x:Name="SmartFrameCheck" Content="Smart UI-element framing" IsChecked="True" Checked="ZoomProperty_Changed" Unchecked="ZoomProperty_Changed"/>
+                        <Button Content="Delete zoom" Click="DeleteZoom_Click" Background="#42202B" BorderBrush="#6E3343"/>
+                    </StackPanel></ScrollViewer></TabItem>
+
+                    <TabItem Header="3D"><ScrollViewer><StackPanel Margin="10">
+                        <TextBlock Text="3D camera / keyframes" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Rotate X"/><Slider x:Name="RotateXSlider" Minimum="-45" Maximum="45" ValueChanged="ThreeDProperty_Changed"/><TextBlock Text="Rotate Y"/><Slider x:Name="RotateYSlider" Minimum="-45" Maximum="45" ValueChanged="ThreeDProperty_Changed"/><TextBlock Text="Rotate Z"/><Slider x:Name="RotateZSlider" Minimum="-20" Maximum="20" ValueChanged="ThreeDProperty_Changed"/>
+                        <TextBlock Text="Depth / Z"/><Slider x:Name="DepthSlider" Minimum="-40" Maximum="60" ValueChanged="ThreeDProperty_Changed"/><TextBlock Text="Pan X"/><Slider x:Name="PanXSlider" Minimum="-50" Maximum="50" ValueChanged="ThreeDProperty_Changed"/><TextBlock Text="Pan Y"/><Slider x:Name="PanYSlider" Minimum="-50" Maximum="50" ValueChanged="ThreeDProperty_Changed"/>
+                        <TextBlock Text="Perspective"/><Slider x:Name="PerspectiveSlider" Minimum="0" Maximum="2" Value="1" ValueChanged="ThreeDProperty_Changed"/><TextBlock Text="Speed"/><Slider x:Name="SpeedSlider" Minimum="0.25" Maximum="3" Value="1" ValueChanged="ThreeDProperty_Changed"/><TextBlock Text="Intensity"/><Slider x:Name="IntensitySlider" Minimum="0" Maximum="2" Value="1" ValueChanged="ThreeDProperty_Changed"/>
+                        <TextBlock Text="Easing"/><ComboBox x:Name="ThreeDEasingCombo" SelectionChanged="ThreeDProperty_Changed"><ComboBoxItem Content="linear"/><ComboBoxItem Content="smoothstep"/><ComboBoxItem Content="cubic-in"/><ComboBoxItem Content="cubic-out"/><ComboBoxItem Content="cubic-in-out"/><ComboBoxItem Content="spring-soft"/><ComboBoxItem Content="spring-snappy"/></ComboBox>
+                        <TextBlock Text="Hold (ms)"/><TextBox x:Name="ThreeDHoldText" TextChanged="ThreeDProperty_Changed"/>
+                        <CheckBox x:Name="ShadowCheck" Content="Screen shadow" IsChecked="True" Checked="ThreeDProperty_Changed" Unchecked="ThreeDProperty_Changed"/><CheckBox x:Name="ReflectionCheck" Content="Screen reflection" Checked="ThreeDProperty_Changed" Unchecked="ThreeDProperty_Changed"/>
+                        <WrapPanel><Button Content="＋ Keyframe at playhead" Click="Add3DKeyframe_Click"/><Button Content="Regenerate preset keys" Click="Regenerate3DKeys_Click"/></WrapPanel>
+                        <TextBlock x:Name="KeyframeCountText" Text="0 keyframes" Foreground="#8F9AAF" Margin="4"/>
+                        <Button Content="Delete 3D motion" Click="Delete3D_Click" Background="#42202B" BorderBrush="#6E3343"/>
+                    </StackPanel></ScrollViewer></TabItem>
+
+                    <TabItem Header="Cursor"><ScrollViewer><StackPanel Margin="10">
+                        <TextBlock Text="Cursor replacement / effects" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <ComboBox x:Name="CursorStyleCombo" SelectedIndex="0" SelectionChanged="CursorProperty_Changed"><ComboBoxItem Content="AROMOTION White"/><ComboBoxItem Content="AROMOTION Dark"/><ComboBoxItem Content="Minimal Dot"/><ComboBoxItem Content="High Contrast"/><ComboBoxItem Content="Custom"/></ComboBox>
+                        <CheckBox x:Name="ReplaceCursorCheck" Content="Replace original cursor" IsChecked="True" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/><CheckBox x:Name="HideCursorCheck" Content="Hide cursor" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/><CheckBox x:Name="CursorShadowCheck" Content="Cursor shadow" IsChecked="True" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
+                        <TextBlock Text="Cursor colour (#RRGGBB)"/><TextBox x:Name="CursorColorText" Text="#FFFFFF" TextChanged="CursorProperty_Changed"/><Button Content="Choose custom cursor image…" Click="BrowseCursor_Click"/><TextBlock x:Name="CustomCursorPathText" Text="No custom cursor selected" Foreground="#7E899E" TextWrapping="Wrap"/>
+                        <TextBlock Text="Size"/><Slider x:Name="CursorSizeSlider" Minimum="0.5" Maximum="3" Value="1" ValueChanged="CursorProperty_Changed"/><TextBlock Text="Opacity"/><Slider x:Name="CursorOpacitySlider" Minimum="0.1" Maximum="1" Value="1" ValueChanged="CursorProperty_Changed"/><TextBlock Text="Smoothing"/><Slider x:Name="CursorSmoothingSlider" Minimum="0" Maximum="0.95" Value="0.68" ValueChanged="CursorProperty_Changed"/><TextBlock Text="Motion blur / trail"/><Slider x:Name="CursorBlurSlider" Minimum="0" Maximum="1" Value="0.25" ValueChanged="CursorProperty_Changed"/>
+                        <TextBlock Text="Click ring"/><ComboBox x:Name="ClickRingCombo" SelectedIndex="0" SelectionChanged="CursorProperty_Changed"><ComboBoxItem Content="Pulse"/><ComboBoxItem Content="Ripple"/><ComboBoxItem Content="Solid"/><ComboBoxItem Content="None"/></ComboBox>
+                        <TextBlock Text="Left click colour"/><TextBox x:Name="LeftClickColorText" Text="#7C5CFF" TextChanged="CursorProperty_Changed"/><TextBlock Text="Right click colour"/><TextBox x:Name="RightClickColorText" Text="#FF5D8F" TextChanged="CursorProperty_Changed"/><TextBlock Text="Click animation (ms)"/><TextBox x:Name="ClickDurationText" Text="420" TextChanged="CursorProperty_Changed"/>
+                        <CheckBox x:Name="ClickSoundCheck" Content="Click sound" IsChecked="True" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/><Button Content="Choose custom click sound…" Click="BrowseClickSound_Click"/><TextBlock x:Name="ClickSoundPathText" Text="Built-in click sound" Foreground="#7E899E" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="CursorFollowCheck" Content="Cursor-follow zoom mode" Checked="CursorProperty_Changed" Unchecked="CursorProperty_Changed"/>
+                    </StackPanel></ScrollViewer></TabItem>
+
+                    <TabItem Header="Privacy"><ScrollViewer><StackPanel Margin="10">
+                        <TextBlock Text="Selected spotlight / blur" FontWeight="Bold"/>
+                        <TextBlock Text="Spotlight shape" Margin="0,10,0,0"/><ComboBox x:Name="SpotlightShapeCombo" SelectionChanged="PrivacyProperty_Changed"><ComboBoxItem Content="Circle"/><ComboBoxItem Content="Rectangle"/></ComboBox>
+                        <TextBlock Text="X / Y"/><StackPanel Orientation="Horizontal"><TextBox x:Name="PrivacyXText" Width="100" TextChanged="PrivacyProperty_Changed"/><TextBox x:Name="PrivacyYText" Width="100" Margin="8,0,0,0" TextChanged="PrivacyProperty_Changed"/></StackPanel>
+                        <TextBlock Text="Width / Height"/><StackPanel Orientation="Horizontal"><TextBox x:Name="PrivacyWidthText" Width="100" TextChanged="PrivacyProperty_Changed"/><TextBox x:Name="PrivacyHeightText" Width="100" Margin="8,0,0,0" TextChanged="PrivacyProperty_Changed"/></StackPanel>
+                        <TextBlock Text="Spotlight darkness" Margin="0,8,0,0"/><Slider x:Name="SpotlightDarknessSlider" Minimum="0" Maximum="0.95" Value="0.68" ValueChanged="PrivacyProperty_Changed"/><TextBlock Text="Spotlight feather"/><Slider x:Name="SpotlightFeatherSlider" Minimum="0" Maximum="80" Value="28" ValueChanged="PrivacyProperty_Changed"/><CheckBox x:Name="SpotlightFollowCheck" Content="Spotlight follows cursor" Checked="PrivacyProperty_Changed" Unchecked="PrivacyProperty_Changed"/>
+                        <TextBlock Text="Blur intensity" Margin="0,8,0,0"/><Slider x:Name="BlurIntensitySlider" Minimum="1" Maximum="50" Value="18" ValueChanged="PrivacyProperty_Changed"/><TextBlock Text="Blur feather"/><Slider x:Name="BlurFeatherSlider" Minimum="0" Maximum="40" Value="8" ValueChanged="PrivacyProperty_Changed"/><CheckBox x:Name="BlurTrackCheck" Content="Track cursor / moving blur" Checked="PrivacyProperty_Changed" Unchecked="PrivacyProperty_Changed"/>
+                        <WrapPanel><Button Content="Delete spotlight" Click="DeleteSpotlight_Click" Background="#42202B"/><Button Content="Delete blur" Click="DeleteBlur_Click" Background="#42202B"/></WrapPanel>
+                    </StackPanel></ScrollViewer></TabItem>
                 </TabControl>
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Background="#0F131B" BorderBrush="#252C39" BorderThickness="0,1,0,0">
-            <Grid Margin="12">
-                <Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                <DockPanel>
-                    <TextBlock Text="TIMELINE" Foreground="#7F8AA0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TimelineHintText" DockPanel.Dock="Right" Text="Zoom blocks: drag center to move · drag edges to resize" Foreground="#667087" FontSize="11" VerticalAlignment="Center"/>
-                </DockPanel>
-                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                    <Canvas x:Name="TimelineCanvas" Width="1200" Height="175" Background="#0A0D12" MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown" MouseMove="TimelineCanvas_MouseMove" MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"/>
-                </ScrollViewer>
-            </Grid>
-        </Border>
+        <Border Grid.Row="2" Background="#0F131B" BorderBrush="#252C39" BorderThickness="0,1,0,0"><Grid Margin="12"><Grid.RowDefinitions><RowDefinition Height="28"/><RowDefinition Height="*"/></Grid.RowDefinitions><DockPanel><TextBlock Text="TIMELINE" Foreground="#7F8AA0" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/><TextBlock x:Name="TimelineHintText" DockPanel.Dock="Right" Text="Drag center = move · drag edges = resize · click preview = focus position" Foreground="#667087" FontSize="11" VerticalAlignment="Center"/></DockPanel><ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"><Canvas x:Name="TimelineCanvas" Width="1200" Height="180" Background="#0A0D12" MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown" MouseMove="TimelineCanvas_MouseMove" MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"/></ScrollViewer></Grid></Border>
     </Grid>
 </Window>
