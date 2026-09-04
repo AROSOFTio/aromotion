@@ -12,12 +12,14 @@ public sealed class ProjectSession
         FramesPerSecond = fps;
         VideoPath = Path.Combine(projectDirectory, "master.mkv");
         EventsPath = Path.Combine(projectDirectory, "events.jsonl");
+        FocusFramesPath = Path.Combine(projectDirectory, "focus-frames.jsonl");
         ProjectFilePath = Path.Combine(projectDirectory, "project.json");
     }
 
     public string ProjectDirectory { get; }
     public string VideoPath { get; }
     public string EventsPath { get; }
+    public string FocusFramesPath { get; }
     public string ProjectFilePath { get; }
     public string QualityProfile { get; }
     public int FramesPerSecond { get; }
@@ -28,23 +30,17 @@ public sealed class ProjectSession
     public static async Task<ProjectSession> CreateAsync(string rootDirectory, string qualityProfile, int fps)
     {
         Directory.CreateDirectory(rootDirectory);
-
         var folderName = DateTime.Now.ToString("yyyy-MM-dd_HHmmss");
         var projectDirectory = Path.Combine(rootDirectory, folderName);
         var suffix = 1;
-
         while (Directory.Exists(projectDirectory))
-        {
             projectDirectory = Path.Combine(rootDirectory, $"{folderName}_{suffix++}");
-        }
-
         Directory.CreateDirectory(projectDirectory);
 
         var session = new ProjectSession(projectDirectory, qualityProfile, fps)
         {
             StartedAtUtc = DateTimeOffset.UtcNow
         };
-
         await session.WriteProjectFileAsync("recording");
         return session;
     }
@@ -60,19 +56,21 @@ public sealed class ProjectSession
     {
         var model = new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
             app = "AROMOTION Studio",
             state,
             source = new
             {
                 video = Path.GetFileName(VideoPath),
-                events = Path.GetFileName(EventsPath)
+                events = Path.GetFileName(EventsPath),
+                focusFrames = Path.GetFileName(FocusFramesPath)
             },
             capture = new
             {
                 fps = FramesPerSecond,
                 quality = QualityProfile,
-                cursorBakedIntoVideo = false
+                cursorBakedIntoVideo = false,
+                smartUiFraming = true
             },
             startedAtUtc = StartedAtUtc,
             endedAtUtc = EndedAtUtc,
@@ -84,9 +82,6 @@ public sealed class ProjectSession
         };
 
         await using var stream = File.Create(ProjectFilePath);
-        await JsonSerializer.SerializeAsync(stream, model, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+        await JsonSerializer.SerializeAsync(stream, model, new JsonSerializerOptions { WriteIndented = true });
     }
 }
